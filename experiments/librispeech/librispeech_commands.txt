@@ -1,0 +1,20 @@
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_lstm.json --model_dir ../../output/librispeech/ctc/lstm/v1 & disown
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_resnet.json --model_dir ../../output/librispeech/ctc/resnet/v1 & disown
+
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_vae_lstm_large.json --model_dir ../../output/librispeech/ctc_vae/lstm/v3-large & disown
+
+
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_vae_full.json --model_dir ../../output/librispeech/ctc_vae/full/v3 --train_batch_size 8 --eval_batch_size 8 & disown
+
+
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_vae_full_small.json --model_dir ../../output/librispeech/ctc_vae/full/small/v1 & disown
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_vae_split_small.json --model_dir ../../output/librispeech/ctc_vae/split/small/v2 & disown
+
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_half.json --model_dir ../../output/librispeech/ctc/half/v2-subsample & disown
+
+nohup tensorboard --logdir ../../output/librispeech > tb.log & disown
+
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_vae_full_double.json --model_dir ../../output/librispeech/ctc_vae/full_double/v5 --train_batch_size 32 --eval_batch_size 32 & disown
+
+nohup python3.6 librispeech_train.py --config conf/librispeech_ctc_vae_full_double.json --model_dir ../../output/librispeech/ctc_vae/full_double/v4-single --train_batch_size 1 --eval_batch_size 1 & disown
+

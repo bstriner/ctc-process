@@ -1,0 +1,891 @@
+
+singularity_build(){
+sbatch --time=48:00:00 \
+    --job-name="singularity-build" \
+    --partition=cpu \
+    --mem=30G \
+<<EOF
+#!/bin/bash
+singularity build /data/VOL3/bstriner/singularity/images/$1.simg $2 \
+	> /data/VOL3/bstriner/singularity/images/$1.simg.log 2>&1
+EOF
+}
+singularity_build 10.0-1.15.0rc2 docker://bstriner/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04:1.15.0rc2
+
+
+singularity_build 10.1-1.14.0 docker://bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:1.14.0
+singularity_build 10.1-1.15.0rc2 docker://bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:1.15.0rc2
+
+
+
+sbatch --time=48:00:00 \
+    --job-name="singularity-build" \
+    --partition=cpu \
+    --mem=30G \
+<<EOF
+#!/bin/bash
+singularity build /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg docker://bstriner/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04:tf-nightly \
+	> /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg.log 2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="singularity-build" \
+    --partition=cpu \
+    --mem=30G \
+<<EOF
+#!/bin/bash
+singularity build /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg docker://bstriner/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04:tf-nightly \
+	> /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg.log 2>&1
+EOF
+
+squeue -o "%.18i %.9P %.100j %.8u %.8T %.10M %.9l %.6D %R" -i 30
+squeue -o "%.18i %.9P %.120j %.8u %.8T %.10M %R" -i 30 --sort=j
+
+ssh -N \
+    -L 6006:stone-0-29:6006 \
+    -L 6007:stone-0-30:6006 \
+    -L 6008:stone-0-30:6007 \
+    -L 6009:stone-0-31:6006 \
+    -L 6010:stone-0-31:6007 \
+    -L 6011:stone-0-32:6006 \
+    bstriner@stoned.is.cs.cmu.edu
+
+ssh -N \
+    -L 6006:stone-0-29:6006 \
+    -L 6007:stone-0-29:6007 \
+    -L 6008:stone-0-30:6006 \
+    bstriner@stoned.is.cs.cmu.edu
+
+ssh -N -L 6006:stone-0-29:6006 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6007:stone-0-29:6007 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6006:stone-0-30:6006 bstriner@stoned.is.cs.cmu.edu
+
+
+ssh -N \
+    -L 6006:stone-0-29:6006 \
+    -L 6007:stone-0-29:6007 \
+    -L 6008:stone-0-29:6008 \
+    -L 6009:stone-0-29:6009 \
+    -L 6010:stone-0-29:6010 \
+    -L 6011:stone-0-29:6011 \
+    -L 6012:stone-0-29:6012 \
+    bstriner@stoned.is.cs.cmu.edu
+
+ssh -N \
+    -L 6006:stone-0-29:6006 \
+    -L 6007:stone-0-29:6007 \
+    -L 6008:stone-0-30:6006 \
+    -L 6009:stone-0-30:6007 \
+    bstriner@stoned.is.cs.cmu.edu
+
+ssh -N \
+    -L 6006:stone-0-29:6006 \
+    -L 6007:stone-0-29:6007 \
+    -L 6007:stone-0-29:6007 \
+    -L 6007:stone-0-29:6007 \
+    -L 6007:stone-0-29:6007 \
+    -L 6008:stone-0-30:6006 \
+    -L 6009:stone-0-30:6007 \
+    -L 6010:stone-0-31:6006 \
+    -L 6011:stone-0-31:6007 \
+    bstriner@stoned.is.cs.cmu.edu
+
+ssh -N -L 6015:stone-0-30:6015 -L 6016:stone-0-30:6016 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6019:stone-0-35:6019 -L 6020:stone-0-35:6020 bstriner@stoned.is.cs.cmu.edu
+
+ssh -N -L 6017:stone-0-32:6017 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6021:stone-0-32:6021 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6016:stone-0-32:6016 bstriner@stoned.is.cs.cmu.edu
+
+ssh -N -L 6006:stone-0-29:6006 -L 6007:stone-0-29:6007 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6006:stone-0-30:6006 -L 6007:stone-0-30:6007 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6006:stone-0-11-1:6006 -L 6007:stone-0-11-1:6007 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6006:stone-2-7:6006 -L 6007:stone-2-10:6006 bstriner@stoned.is.cs.cmu.edu
+
+squeue -u bstriner -o "%i %j %R"
+
+scontrol requeue 1557,1559,1560,1561,1562,1570
+
+    --cpus-per-task=4 \
+
+
+SUBDIR=wsj-latest-1e3
+sbatch --time=48:00:00 \
+    --job-name="tb-asr-${SUBDIR}" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/${SUBDIR} \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-${SUBDIR}.out \
+    2>&1
+EOF
+
+
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-ctc-sentencepiece" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj-ctc-sentencepiece \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-ctc-sentencepiece.out \
+    2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-ctc-sentencepiece-bn" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj-ctc-sentencepiece-bn \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-ctc-sentencepiece-bn.out \
+    2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-models" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/models \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-models.out \
+    2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-ctc-mm" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj-ctc-mm \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-ctc-mm.out \
+    2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-sgd" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc/sgd \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-sgd.out \
+    2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-aug" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc/aug \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-aug.out \
+    2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-mm" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc-mm \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-mm.out \
+    2>&1
+EOF
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-500-6" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc/sparse-500-6 \
+    > /data/VOL3/bstriner/asr-vae/logs/tb-3.out \
+    2>&1
+EOF
+
+
+PORT=6006
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-${PORT}" \
+    --partition=cpu \
+    --nodelist=stone-0-11-1 \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc/sparse \
+    --port=${PORT} \
+    > /data/VOL3/bstriner/asr-vae/logs/tb.out \
+    2>&1
+EOF
+PORT=6007
+sbatch --time=48:00:00 \
+    --job-name="wsj-tb-${PORT}" \
+    --partition=cpu \
+    --nodelist=stone-0-11-1 \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc/sparse-500-6 \
+    --port=${PORT} \
+    > /data/VOL3/bstriner/asr-vae/logs/tb.out \
+    2>&1
+EOF
+
+
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tensorboard-datasets" \
+    --partition=cpu \
+    --nodelist=stone-0-29 \
+    --mem=10G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc/datasets \
+    --port=6008 \
+    > /data/VOL3/bstriner/asr-vae/logs/tb.out \
+    2>&1
+EOF
+
+#islpc training
+
+# CTC Model
+DATASET="fbank80-cmvn-global-logpitch"
+VARIATIONAL="adaptive"
+SIGMA_INIT="0.02"
+DIM=500
+DEPTH=5
+NORM=none
+CONSTLEN=True
+SUBSAMPLE=3
+LR=3e-4
+CLIP=0.01
+OPT=adam
+JOB_NAME="wsj-${DIM}-${DEPTH}-${DATASET}-${NORM}-variational-${VARIATIONAL}-init-${SIGMA_INIT}-${OPT}-${LR}-clipping-${CLIP}-sparse-sub-${SUBSAMPLE}-constlen-${CONSTLEN}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=2gpu \
+    --nodelist=islpc32 \
+    --mem=14G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/sparse-constlen/${DATASET}/${JOB_NAME}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=100000 \
+    --hparams="constlen_lstm=${CONSTLEN},decoder_pyramid_depth=0,subsample=3,independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},decoder_dropout=0.0,decoder_uout=True,optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    > "/data/VOL3/bstriner/asr-vae/logs/ctc/datasets/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+# CTC Model Aug
+DATASET="fbank80-cmvn-global-logpitch"
+VARIATIONAL="none"
+SIGMA_INIT="0.01"
+DIM=500
+DEPTH=5
+NORM="none"
+CONSTLEN=True
+SUBSAMPLE=3
+LR=3e-4
+CLIP=0.1
+OPT=adam
+WARP=80
+JOB_NAME="wsj-gru3-noaug-noscale-${DIM}-${DEPTH}-${DATASET}-${NORM}-variational-${VARIATIONAL}-init-${SIGMA_INIT}-${OPT}-${LR}-clipping-${CLIP}-sparse-sub-${SUBSAMPLE}-constlen-${CONSTLEN}-aug-${WARP}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=2gpu \
+    --nodelist=islpc35 \
+    --mem=14G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/aug/${DATASET}/${JOB_NAME}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --hparams="gru=True,lr_scale=False,lr_rate=0.5,lr_min=1e-7,epochs_without_improvement=25,specaugment=False,specaugment_W=${WARP},constlen_lstm=${CONSTLEN},decoder_pyramid_depth=0,subsample=3,independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},decoder_dropout=0.0,decoder_uout=True,optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    --allow_growth="False" \
+    > "/data/VOL3/bstriner/asr-vae/logs/aug/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+
+
+
+# CTC SGD Model
+DATASET="fbank80-cmvn-global-logpitch"
+VARIATIONAL="none"
+SIGMA_INIT="0.01"
+DIM=500
+DEPTH=5
+NORM=batch_norm_constlen
+CONSTLEN=True
+SUBSAMPLE=3
+LR=2e-2
+CLIP=0.1
+OPT=sgd
+JOB_NAME="wsj-${DIM}-${DEPTH}-${DATASET}-${NORM}-variational-${VARIATIONAL}-init-${SIGMA_INIT}-${OPT}-${LR}-clipping-${CLIP}-sparse-sub-${SUBSAMPLE}-constlen-${CONSTLEN}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=2gpu \
+    --nodelist=islpc32 \
+    --mem=14G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/sgd/${DATASET}/${JOB_NAME}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --hparams="lr_min=1e-6,epochs_without_improvement=2,lr_scale=True,lr_rate=0.5,constlen_lstm=${CONSTLEN},decoder_pyramid_depth=0,subsample=3,independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},decoder_dropout=0.0,decoder_uout=True,optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    --allow_growth="False" \
+    > "/data/VOL3/bstriner/asr-vae/logs/sgd/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+# CTC MM Model
+DATASET="fbank80-cmvn-global-logpitch"
+MM=4
+VARIATIONAL="none"
+SIGMA_INIT="0.01"
+DIM=700
+DEPTH=5
+NORM=none
+CONSTLEN=True
+SUBSAMPLE=3
+LR=3e-4
+CLIP=0.1
+OPT=adam
+AUG=True
+WARP=80
+JOB_NAME="wsj3-mm${MM}-${DIM}-${DEPTH}-${DATASET}-${NORM}-variational-${VARIATIONAL}-init-${SIGMA_INIT}-${OPT}-${LR}-clipping-${CLIP}-sparse-sub-${SUBSAMPLE}-constlen-${CONSTLEN}-aug-${AUG}-${WARP}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=2gpu \
+    --nodelist=islpc34 \
+    --mem=14G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-mm/${DATASET}/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=100000 \
+    --hparams="epochs_without_improvement=3,lr_scale=True,specaugment=${AUG},specaugment_W=${WARP},mm_size=${MM},constlen_lstm=${CONSTLEN},decoder_pyramid_depth=0,subsample=3,independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},decoder_dropout=0.0,decoder_uout=True,optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    > "/data/VOL3/bstriner/asr-vae/logs/ctc/datasets/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+
+# ISLPC Resume
+DATASET="fbank80-cmvn-global-logpitch"
+JOB_NAME="wsj-gru3-scale-600-6-fbank80-cmvn-global-logpitch-batch_norm_constlen-variational-adaptive-init-0.05-adam-3e-4-clipping-0.1-sparse-sub-3-constlen-True-aug-80"
+MODEL_DIR="../../output/wsj/ctc/aug/${DATASET}/${JOB_NAME}"
+echo "${JOB_NAME}"
+ls $MODEL_DIR
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=2gpu \
+    --nodelist=islpc32 \
+    --mem=14G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="${MODEL_DIR}/configuration-hparams.json" \
+    --model_dir="${MODEL_DIR}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=100000 \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    --allow_growth="False" \
+    > "/data/VOL3/bstriner/asr-vae/logs/ctc/datasets/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+
+DATASET="fbank80-cmvn-global-logpitch"
+VARIATIONAL="adaptive"
+SIGMA_INIT="0.01"
+JOB_NAME="wsj-320-9-${DATASET}-batch_norm-variational-${VARIATIONAL}-init-${SIGMA_INIT}-adam-3e-5-residual"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=4gpu \
+    --nodelist=islpc53 \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="conf/wsj_ctc_variational.json" \
+    --model_dir="../../output/wsj/ctc/${DATASET}/${JOB_NAME}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=50000 \
+    --hparams="residual=True,decoder_dim=320,decoder_depth=9,batch_norm=batch_norm,decoder_dropout=0.0,decoder_uout=True,optimizer=adam,lr=3e-5,variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    > "/data/VOL3/bstriner/asr-vae/logs/ctc/datasets/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+
+    --cpus-per-task=6 \
+
+# islpc Resume
+DATASET="fbank80-cmvn-global-logpitch"
+JOB_NAME="wsj-320-5-fbank80-cmvn-global-logpitch-none-variational-adaptive-init-0.001-adam-3e-4-clipping-0.01-sparse-sub-3-constlen-True"
+MODEL_DIR="../../output/wsj/ctc/sparse-constlen/${DATASET}/${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=2gpu \
+    --nodelist=islpc33 \
+    --mem=14G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="${MODEL_DIR}/configuration-hparams.json" \
+    --model_dir="${MODEL_DIR}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=1000000 \
+    --max_steps_without_decrease=500000 \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    > "/data/VOL3/bstriner/asr-vae/logs/ctc/resume/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+# Stone training
+
+DATASET="fbank80-cmvn-global-logpitch"
+DATASET="mel-40-cmvn-speaker"
+DATASET="mel-80-cmvn-speaker"
+
+DATASET="fbank80-cmvn-global-logpitch"
+VARIATIONAL="none"
+SIGMA_INIT="0.01"
+DIM=128
+DEPTH=5
+NORM=none
+CONSTLEN=True
+SUBSAMPLE=3
+LR=3e-4
+CLIP=0.01
+OPT=adam
+JOB_NAME="wsj-${DIM}-${DEPTH}-${DATASET}-${NORM}-variational-${VARIATIONAL}-init-${SIGMA_INIT}-${OPT}-${LR}-clipping-${CLIP}-sparse-sub-${SUBSAMPLE}-constlen-${CONSTLEN}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --nodelist=stone-0-38 \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec --nv \
+    /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/constlen/${JOB_NAME}.txt" \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/sparse-constlen/${DATASET}/${JOB_NAME}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=100000 \
+    --hparams="constlen_lstm=${CONSTLEN},decoder_pyramid_depth=0,subsample=3,independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},decoder_dropout=0.0,decoder_uout=True,optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode=sparse
+EOF
+
+
+# STone resume
+wsj-320-5-fbank80-cmvn-global-logpitch-batch_norm-variational-none-init-0.01-momentum-1e-4-clipping-0.01-sparse"
+wsj-500-5-fbank80-cmvn-global-logpitch-batch_norm-variational-none-init-0.01-momentum-1e-4-clipping-0.01-sparse
+
+DATASET="fbank80-cmvn-global-logpitch"
+JOB_NAME="wsj-500-5-fbank80-cmvn-global-logpitch-batch_norm_constlen-variational-adaptive-init-0.01-adam-3e-5-clipping-0.1-sparse-sub-3-constlen-True"
+MODEL_DIR="../../output/wsj/ctc/sparse-constlen/${DATASET}/${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --nodelist=stone-0-25 \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec --nv \
+    /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/ctc/datasets/${JOB_NAME}.txt" \
+    --config="${MODEL_DIR}/configuration-hparams.json" \
+    --model_dir="${MODEL_DIR}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=1000000 \
+    --max_steps_without_decrease=150000 \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json"
+EOF
+
+
+srun --partition=4gpu --nodelist=islpc50 df -h
+
+srun --partition=2gpu --nodelist=islpc31 df -h
+srun --partition=2gpu --nodelist=islpc34 df -h
+srun --partition=2gpu --nodelist=islpc35 df -h
+srun --partition=2gpu --nodelist=islpc39 df -h
+
+srun --partition=2gpu --nodelist=islpc30 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc31 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc34 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc35 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc39 ls /scratch/bstriner/wsj-data
+
+srun --partition=2gpu --nodelist=islpc37 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc38 ls /scratch/bstriner/wsj-data
+
+srun --partition=2gpu --nodelist=islpc38 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc35 ls /scratch/bstriner/wsj-data
+
+srun --partition=4gpu --nodelist=islpc50 ls /scratch/bstriner/wsj-data
+srun --partition=4gpu --nodelist=islpc51 ls /scratch/bstriner/wsj-data
+
+31
+fbank80-cmvn-speaker-logpitch
+fbank80-cmvn-global
+
+34
+fbank80-cmvn-speaker
+fbank80-logpitch
+
+39
+fbank80
+fbank80-cmvn-global-logpitch
+
+sbatch --partition=2gpu --nodelist=islpc35 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=2gpu --nodelist=islpc30 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global-logpitch /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-38 --gres=gpu:1 --mem=30G <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-speaker-logpitch /scratch/bstriner/wsj-data
+EOF
+
+
+srun --partition=gpu --nodelist=stone-0-25 df -h
+srun --partition=gpu --nodelist=stone-0-36 df -h
+srun --partition=gpu --nodelist=stone-0-38 df -h
+srun --partition=gpu --nodelist=stone-0-27 df -h
+
+srun --partition=gpu --nodelist=stone-0-25 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-27 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-35 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-36 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-38 ls /scratch/bstriner/wsj-data
+
+for NODE in islpc36
+do
+echo ${NODE}
+srun --partition=2gpu --nodelist=${NODE} ls /scratch/bstriner/wsj-data 2>/dev/null
+done
+
+sbatch --partition=2gpu --nodelist=islpc36 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global-logpitch /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-27 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global-logpitch /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-27 --mem=1G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-40-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+
+sbatch --partition=gpu --nodelist=stone-0-25 --mem=1G --gres=gpu:1 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-40-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-38 --mem=1G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-80-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+
+
+srun --partition=2gpu --nodelist=islpc30 du -sh
+
+
+srun --partition=cpu --pty bash
+singularity shell /data/VOL3/bstriner/singularity/images/tf-nightly-cpu.simg
+
+
+sbatch \
+    --job-name="wsj_records" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec \
+    /data/VOL3/bstriner/singularity/images/tf-nightly-cpu.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel40-cmvn-global.txt" \
+    --input_dir="/data/VOL3/bstriner/data/wsj/export" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel40-cmvn-global" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark"
+EOF
+
+sbatch \
+    --job-name="wsj_records" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir="/data/VOL3/bstriner/data/wsj/export" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel40-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel40-cmvn-speaker.txt" \
+     2>&1
+EOF
+
+
+sbatch \
+    --job-name="librispeech_records" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_records.py \
+    --input_dir="/data/VOL3/bstriner/data/librispeech/export" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/librispeech/tfrecords-mel40-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel40-cmvn-speaker.txt" \
+     2>&1
+EOF
+

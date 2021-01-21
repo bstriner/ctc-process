@@ -1,0 +1,15 @@
+{
+  "model": "ae",
+  "constlen": true,
+  "residual": true,
+  "lr": 3e-5,
+  "l2": 0.0,
+  "encoder_dim": 320,
+  "encoder_depth": 3,
+  "encoder_dropout": 0,
+  "decoder_dim": 320,
+  "decoder_depth": 3,
+  "decoder_dropout": 0,
+  "latent_dim": 256,
+  "clip_gradient_value": 0.1
+}

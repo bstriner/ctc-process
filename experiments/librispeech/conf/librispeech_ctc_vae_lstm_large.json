@@ -1,0 +1,21 @@
+{
+  "model": "ctc-vae",
+  "model_version": "full-double",
+  "attn_mode": "softmax",
+  "subsample": 3,
+  "lr": 3e-4,
+  "l2": 1e-8,
+  "depth": 12,
+  "listener_dim": 320,
+  "dropout": 0,
+  "vae_depth": 4,
+  "vae_dim": 320,
+  "vae_dropout": 0,
+  "attention_dim": 128,
+  "latent_dim": 128,
+  "anneal_start": 10000,
+  "anneal_end": 30000,
+  "anneal_min": 1e-4,
+  "kl_min": 1e-2,
+  "clip_gradient_norm": 1
+}

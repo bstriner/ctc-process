@@ -1,0 +1,17 @@
+{
+  "model": "ae",
+  "constlen": false,
+  "residual": false,
+  "batch_norm": true,
+  "lr": 3e-5,
+  "l2": 0.0,
+  "encoder_dim": 128,
+  "encoder_depth": 2,
+  "encoder_dropout": 0,
+  "decoder_dim": 128,
+  "decoder_depth": 2,
+  "decoder_dropout": 0,
+  "attention_dim": 64,
+  "latent_dim": 64,
+  "clip_gradient_value": 1.0
+}

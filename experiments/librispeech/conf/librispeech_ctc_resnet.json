@@ -1,0 +1,11 @@
+{
+  "model": "ctc",
+  "model_version": "resnet",
+  "subsample": 3,
+  "lr": 3e-4,
+  "l2": 1e-6,
+  "depth": 11,
+  "listener_dim": 256,
+  "kernel_size": 7,
+  "clip_gradient_norm": 1
+}

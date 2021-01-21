@@ -1,0 +1,446 @@
+kaldi LibriSpeech
+
+nohup docker build . -t bstriner/kaldi:cpu & disown
+nohup docker build . -t bstriner/kaldi:gpu & disown
+docker login
+
+nohup docker push bstriner/kaldi:cpu > push.out & disown
+nohup docker push bstriner/kaldi:gpu > push.out & disown
+
+docker build . -t bstriner/kaldi:cpu && docker login && docker push bstriner/kaldi:cpu
+
+sbatch <<EOS
+#!/bin/sh
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-latest.simg docker://kaldiasr/kaldi:latest
+EOS
+
+sbatch <<EOS
+#!/bin/sh
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-gpu-latest.simg docker://kaldiasr/kaldi:gpu-latest
+EOS
+
+
+
+sbatch <<EOS
+#!/bin/sh
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-gpu.simg shub://bstriner/kaldi-image:gpu
+EOS
+
+sbatch <<EOS
+#!/bin/sh
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg shub://bstriner/kaldi-image:cpu
+EOS
+
+sbatch <<EOS
+#!/bin/sh
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg docker://bstriner/kaldi:cpu
+EOS
+
+(while kill -0 8221; do sleep 1; done) && echo -en "\007 \007 \007"
+
+srun --partition=gpu --gres=gpu:1 --time=48:00:00  --pty bash
+singularity shell --nv /data/VOL3/bstriner/singularity/images/kaldi-gpu-latest.simg
+
+srun --partition=cpu --time=48:00:00 --mem=30G  --pty bash
+singularity shell /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg
+singularity shell -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt /data/VOL3/bstriner/singularity/images/kaldi-latest.simg
+
+
+singularity image.export /data/VOL3/bstriner/singularity/images/kaldi-latest.simg > kaldi-latest.tar
+
+docker pull kaldiasr/kaldi:latest
+docker run kaldiasr/kaldi:latest tar czf - /opt > kaldi-latest-opt.tgz
+scp kaldi-latest-opt.tgz bstriner@stoned.is.cs.cmu.edu:/data/VOL3/bstriner/singularity/images
+
+docker pull kaldiasr/kaldi:gpu-latest
+docker run kaldiasr/kaldi:gpu-latest tar czf - /opt > kaldi-gpu-latest-opt.tgz
+scp kaldi-gpu-latest-opt.tgz bstriner@stoned.is.cs.cmu.edu:/data/VOL3/bstriner/singularity/images
+
+singularity shell -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt /data/VOL3/bstriner/singularity/images/kaldi-latest.simg
+
+singularity shell -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg.bak2
+
+ for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360; do
+    # use underscore-separated names in data directories.
+    /opt/kaldi/egs/librispeech/s5/local/data_prep.sh /data/MM1/corpora/librispeech/LibriSpeech/$part  /data/VOL3/bstriner/data/librispeech/$(echo $part | sed s/-/_/g)
+  done
+
+
+cd /data/VOL3/bstriner/data/librispeech
+cd /opt/kaldi/egs/librispeech/s5
+
+--use-energy=false --num-mel-bins=40 --num-ceps=40 --low-freq=20 --high-freq=-400
+
+#Kaldi processing
+
+
+srun --partition=cpu --time=48:00:00 --mem=30G  --pty bash
+singularity shell -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg.bak2
+
+export train_cmd="run.pl --mem 2G"
+export decode_cmd="run.pl --mem 4G"
+export mkgraph_cmd="run.pl --mem 8G"
+export KALDI_ROOT=/opt/kaldi
+export S5=/opt/kaldi/egs/librispeech/s5
+export PATH=$S5/utils/:$KALDI_ROOT/tools/openfst/bin:$S5:$PATH
+source $KALDI_ROOT/tools/config/common_path.sh
+export LC_ALL=C
+PYTHON='python2.7'
+
+cd /opt/kaldi/egs/librispeech/s5
+
+DATADIR=/data/VOL3/bstriner/data/librispeech
+rm -Rf ${DATADIR}
+
+
+
+
+DATADIR=/data/VOL3/bstriner/data/librispeech-mel80
+SRCDIR=/data/MM1/corpora/librispeech/LibriSpeech
+
+for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360; do
+PART2=$(echo $part | sed s/-/_/g)
+SRCPARTDIR=${SRCDIR}/${part}
+PARTDIR=${DATADIR}/${PART2}
+EXPORTDIR=${DATADIR}/export/${PART2}
+WAV=${PARTDIR}/wav.scp
+MFCC=${PARTDIR}/feats-mfcc.ark
+PITCH=${PARTDIR}/feats-pitch.ark
+MFCCPITCH=${PARTDIR}/feats-mfcc-pitch.ark
+MFCCPITCHSCP=${PARTDIR}/feats-mfcc-pitch.scp
+CMVN=${PARTDIR}/cmvn.ark
+FEATSCMVN=${PARTDIR}/feats-cmvn.ark
+SPK2UTT=${PARTDIR}/spk2utt
+UTT2SPK=${PARTDIR}/utt2spk
+TEXT=${PARTDIR}/text
+/opt/kaldi/egs/librispeech/s5/local/data_prep.sh ${SRCPARTDIR}  ${PARTDIR}
+compute-mfcc-feats --sample-frequency=16000 --use-energy=false --num-mel-bins=80 --num-ceps=80 --low-freq=20 --high-freq=-400 scp:${WAV} ark:${MFCC}
+compute-kaldi-pitch-feats --sample-frequency=16000 scp:${WAV} ark:- |  process-kaldi-pitch-feats --add-raw-log-pitch=true ark:- ark:${PITCH}
+paste-feats --length-tolerance=2 \
+  "ark:${MFCC}" \
+  "ark:${PITCH}" \
+  ark:- | \
+  copy-feats ark:- \
+  ark:${MFCCPITCH}
+compute-cmvn-stats --spk2utt=ark:${SPK2UTT} ark:${MFCCPITCH} ark:${CMVN}
+apply-cmvn --utt2spk=ark:${UTT2SPK} ark:${CMVN} ark:${MFCCPITCH} ark:${FEATSCMVN}
+mkdir -p ${EXPORTDIR}
+cp ${FEATSCMVN} ${EXPORTDIR}
+cp ${TEXT} ${EXPORTDIR}
+cp ${UTT2SPK} ${EXPORTDIR}
+done
+
+
+DATADIR=/data/VOL3/bstriner/data/librispeech
+for part in dev-clean test-clean dev-other test-other train-clean-100 train-clean-360; do
+PART2=$(echo $part | sed s/-/_/g)
+PARTDIR=${DATADIR}/${PART2}
+EXPORTDIR=${DATADIR}/export/${PART2}
+UTT2SPK=${PARTDIR}/utt2spk
+mkdir -p ${EXPORTDIR}
+cp ${UTT2SPK} ${EXPORTDIR}
+done
+
+
+
+
+mfcc_feats="ark:compute-mfcc-feats --use-energy=false --num-mel-bins=40 --num-ceps=40 --low-freq=20 --high-freq=-400 scp:${WAV} ark:- |"
+pitch_feats="ark,s,cs:compute-kaldi-pitch-feats scp:${WAV} ark:- |  process-kaldi-pitch-feats --add-raw-log-pitch=true ark:- ark:- |"
+paste-feats --length-tolerance=2 \
+  "$mfcc_feats" \
+  "$pitch_feats" \
+  ark:- | \
+  copy-feats ark:- \
+  ark:${FEATS}
+
+
+
+### Below are the paths used by the optional parts of the recipe
+
+# We only need the Festival stuff below for the optional text normalization(for LM-training) step
+FEST_ROOT=tools/festival
+NSW_PATH=${FEST_ROOT}/festival/bin:${FEST_ROOT}/nsw/bin
+export PATH=$PATH:$NSW_PATH
+
+# SRILM is needed for LM model building
+SRILM_ROOT=$KALDI_ROOT/tools/srilm
+SRILM_PATH=$SRILM_ROOT/bin:$SRILM_ROOT/bin/i686-m64
+export PATH=$PATH:$SRILM_PATH
+
+# Sequitur G2P executable
+sequitur=$KALDI_ROOT/tools/sequitur/g2p.py
+sequitur_path="$(dirname $sequitur)/lib/$PYTHON/site-packages"
+
+# Directory under which the LM training corpus should be extracted
+LM_CORPUS_ROOT=./lm-corpus
+
+
+source /opt-kaldi/egs/librispeech/s5/cmd.sh
+source /opt-kaldi/egs/librispeech/s5/path.sh
+part=dev-clean
+/opt/kaldi/egs/librispeech/s5/local/data_prep.sh /data/MM1/corpora/librispeech/LibriSpeech/$part  /data/VOL3/bstriner/data/librispeech/$(echo $part | sed s/-/_/g)
+
+source cmd.sh
+source path.sh
+
+part=train-clean-360
+x=train_clean_360
+
+local/data_prep.sh $data/LibriSpeech/$part data/$(echo $part | sed s/-/_/g)
+ steps/make_mfcc_pitch.sh \
+--mfcc-config conf/mfcc_hires.conf \
+--pitch-config conf/pitch.conf \
+--pitch_postprocess_config conf/pitch_process.conf \
+--paste_length_tolerance 30 \
+--cmd "$train_cmd" --nj 20 \
+data/$x data/$x/mfcc_pitch_log data/$x/mfcc_pitch_data
+steps/compute_cmvn_stats.sh \
+data/$x data/$x/cmvn_log data/$x/cmvn_data
+mkdir -p textdata/$x
+copy-matrix scp:data/$x/feats.scp ark,t:textdata/$x/text-feats.ark
+copy-matrix scp:data/$x/cmvn.scp ark,t:textdata/$x/text-cmvn.ark
+cp data/$x/utt2num_frames textdata/$x
+cp data/$x/utt2spk textdata/$x
+cp data/$x/spk2gender textdata/$x
+cp data/$x/text textdata/$x
+
+
+source cmd.sh
+source path.sh
+for x in dev_clean test_clean dev_other test_other train_clean_100; do
+ steps/make_mfcc_pitch.sh \
+--mfcc-config conf/mfcc_hires.conf \
+--pitch-config conf/pitch.conf \
+--pitch_postprocess_config conf/pitch_process.conf \
+--paste_length_tolerance 30 \
+--cmd "$train_cmd" --nj 20 \
+data/$x data/$x/mfcc_pitch_log data/$x/mfcc_pitch_data || exit 1;
+steps/compute_cmvn_stats.sh \
+data/$x data/$x/cmvn_log data/$x/cmvn_data|| exit 1;
+mkdir -p textdata/$x|| exit 1;
+copy-matrix scp:data/$x/feats.scp ark,t:textdata/$x/text-feats.ark || exit 1;
+copy-matrix scp:data/$x/cmvn.scp ark,t:textdata/$x/text-cmvn.ark || exit 1;
+cp data/$x/utt2num_frames textdata/$x || exit 1;
+cp data/$x/utt2spk textdata/$x || exit 1;
+cp data/$x/spk2gender textdata/$x || exit 1;
+cp data/$x/text textdata/$x || exit 1;
+done
+
+copy-matrix scp:data/$x/wav.scp ark,t:textdata/$x/text-wav.ark || exit 1;
+
+export data=`pwd`/data
+echo $data
+
+# base url for downloads.
+data_url=www.openslr.org/resources/12
+lm_url=www.openslr.org/resources/11
+mfccdir=mfcc
+stage=1
+
+. ./cmd.sh
+. ./path.sh
+. parse_options.sh
+
+for part in dev-clean test-clean dev-other test-other train-clean-100; do
+    local/download_and_untar.sh $data $data_url $part
+  done
+local/download_lm.sh $lm_url data/local/lm
+  for part in dev-clean test-clean dev-other test-other train-clean-100; do
+    local/data_prep.sh $data/LibriSpeech/$part data/$(echo $part | sed s/-/_/g)
+  done
+
+    mfcc=$(basename mfccdir) # in case was absolute pathname (unlikely), get basename.
+    echo $mfcc
+    utils/create_split_dir.pl /export/b{02,11,12,13}/$USER/kaldi-data/egs/librispeech/s5/$mfcc/storage \
+     $mfccdir/storage
+
+  for part in dev_clean test_clean dev_other test_other train_clean_100; do
+    steps/make_mfcc.sh --cmd "run.pl" data/$part exp/make_mfcc/$part $mfccdir
+    steps/compute_cmvn_stats.sh data/$part exp/make_mfcc/$part $mfccdir
+  done
+
+  for part in dev_clean test_clean dev_other test_other train_clean_100; do
+    steps/make_mfcc_pitch.sh --cmd "run.pl" data/$part exp/make_mfcc_pitch/$part $mfccdir
+    steps/compute_cmvn_stats.sh data/$part exp/make_mfcc_pitch/$part $mfccdir
+  done
+
+for part in dev_clean test_clean train_clean_100; do copy-matrix scp:data/$part/feats.scp ark,t:data/$part/feats-extract.ark; done
+
+steps/make_mfcc_pitch.sh --cmd "run.pl" data/dev_clean exp/make_mfcc/dev_clean mfcc
+
+Install
+
+cd tools
+./extras/check_dependencies.sh
+make -j 8
+./extras/install_srilm.sh
+
+cd ../src
+./configure --shared
+make depend -j 8
+make -j 8
+
+compute-kaldi-pitch-feats --sample-frequency=8000 scp:wav.scp ark:- 
+compute-and-process-kaldi-pitch-feats --simulate-first-pass-online=true \\\n"
+        "  --frames-per-chunk=10 --sample-frequency=8000 scp:wav.scp ark:- 
+
+		
+4k0c0301 
+
+copy-matrix ark:testark:9 ark,t:-
+
+
+		
+		WSJ
+
+cd /mnt/data/projects/kaldi/egs/wsj/s5
+source path.sh
+nohup ./run.sh --config conf/mfcc_hires.conf --config conf/decode_dnn.config --config conf/online_pitch.conf --stage 0 --train-cmd run.pl --cuda-cmd "run.pl --gpu 1" --decode-cmd "run.pl --mem 2G" --wsj0 /mnt/data/projects/data/wsj/csr_senn --wsj1 /mnt/data/projects/data/wsj/csr_1_senn & disown
+
+
+export wsj0=/mnt/data/projects/data/wsj/csr_senn
+export wsj1=/mnt/data/projects/data/wsj/csr_1_senn
+tail -f nohup.out
+
+
+nohup ./run.sh --config conf/decode_dnn.config --use-energy false --num-mel-bins 40 --num-ceps 40 --low-freq 20 --high-freq -400 --add-raw-log-pitch true --normalization-left-context 100 --normalization-right-context 10 --frames-per-chunk 10 --simulate-first-pass-online true --delay 5 --stage 7 & disown
+
+
+LibriSpeech
+
+cd /mnt/data/projects/kaldi/egs/librispeech/s5
+export data=`pwd`/data
+source path.sh
+source cmd.sh
+nohup ./run.sh --config conf/mfcc_hires.conf --config conf/online_pitch.conf --stage 20 & disown
+tail -f nohup.out
+
+
+
+
+
+export train_cmd=queue.pl
+export decode_cmd="queue.pl --mem 2G"
+export cuda_cmd="queue.pl --gpu 1"
+
+
+#source /mnt/data/projects/kaldi/tools/env.sh
+
+local/wsj_data_prep.sh $wsj0/??-{?,??}.? $wsj1/??-{?,??}.? 
+local/wsj_prepare_dict.sh --dict-suffix "_nosp"
+utils/prepare_lang.sh data/local/dict_nosp "<SPOKEN_NOISE>" data/local/lang_tmp_nosp data/lang_nosp
+local/wsj_format_data.sh --lang-suffix "_nosp"
+
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+    steps/make_mfcc.sh --cmd "$train_cmd" --nj 20 data/$x || exit 1;
+    steps/compute_cmvn_stats.sh data/$x || exit 1;
+done
+
+
+All WSJ
+local/wsj_data_prep.sh $wsj0/??-{?,??}.? $wsj1/??-{?,??}.?  || exit 1;
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do steps/make_mfcc_pitch.sh data/$x; done
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do copy-matrix scp:data/$x/feats.scp ark,t:data/$x/feats-extract.ark; done
+
+copy-matrix scp:data/train_si284/feats.scp ark,t:data/train_si284/text-feats.ark
+copy-matrix scp:data/train_si284/feats.scp ark,t:data/train_si284/text-feats.ark
+
+steps/make_mfcc_pitch.sh data/test_dev93
+
+compute-and-process-kaldi-pitch-feats --simulate-first-pass-online=true --frames-per-chunk=10 --sample-frequency=16000 scp:data/train_si284/wav.scp ark:data/train_si284/pitch.ark
+
+
+
+## Kaldi process
+
+srun --pty bash
+singularity \
+    shell \
+    -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt \
+    /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg
+
+sbatch \
+    --job-name="librispeech_kaldi_40" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec \
+    -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt \
+    /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_kaldi_mel.sh \
+    40 \
+    /data/VOL3/bstriner/data/librispeech/exports/mel40 \
+    >  /data/VOL3/bstriner/data/logs/librispeech_mel40.txt 2>&1
+EOF
+
+sbatch \
+    --job-name="librispeech_kaldi_80" \
+    --partition=cpu \
+    --mem=60G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity \
+    exec \
+    -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt \
+    /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_kaldi_mel.sh \
+    80 \
+    /data/VOL3/bstriner/data/librispeech/exports/mel80 \
+    >  /data/VOL3/bstriner/data/logs/librispeech_mel80.txt 2>&1
+EOF
+
+
+## TF Records
+
+sbatch \
+    --job-name="librispeech_records40" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_records.py \
+    --input_dir="/data/VOL3/bstriner/data/librispeech/exports/mel40" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/librispeech/tfrecords-mel-40-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/librispeech_records-mel-40-cmvn-speaker.txt" \
+     2>&1
+EOF
+
+sbatch \
+    --job-name="librispeech_records80" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_records.py \
+    --input_dir="/data/VOL3/bstriner/data/librispeech/exports/mel80" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/librispeech/tfrecords-mel-80-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/librispeech_records-mel-80-cmvn-speaker.txt" \
+     2>&1
+EOF
+

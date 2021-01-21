@@ -1,0 +1,10 @@
+nohup python3.6 wsj_train.py --config conf/wsj_ctc_full.json --model_dir ../../output/wsj/ctc/full/v3-subsample & disown
+nohup python3.6 wsj_train.py --config conf/wsj_ctc_vae_full.json --model_dir ../../output/wsj/ctc_vae/full/v13-subsample3-newattn & disown
+
+
+nohup python3.6 wsj_train.py --config conf/wsj_ctc_vae_full_small.json --model_dir ../../output/wsj/ctc_vae/full/small/v1 & disown
+nohup python3.6 wsj_train.py --config conf/wsj_ctc_vae_split_small.json --model_dir ../../output/wsj/ctc_vae/split/small/v5 & disown
+
+nohup python3.6 wsj_train.py --config conf/wsj_ctc_half.json --model_dir ../../output/wsj/ctc/half/v2-subsample & disown
+
+nohup tensorboard --logdir ../../output/wsj > tb.log & disown

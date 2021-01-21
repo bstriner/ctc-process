@@ -1,0 +1,2341 @@
+squeue -o "%.18i %.9P %.100j %.8u %.8T %.10M %.9l %.6D %R" -i 30
+
+ wsj-dim320-depth5-lr3e-4-bnbatch_renorm-vTrue-vmFalse-vlpFalse-prior0.1-do0.0
+ wsj-dim320-depth5-lr3e-4-bnbatch_renorm-vTrue-vmFalse-vlpFalse-prior0.1-do0.1
+
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch_tensorboard.sh
+
+srun --partition=4gpu --nodelist=islpc51 mkdir -p /scratch/bstriner
+srun --partition=4gpu --nodelist=islpc51 chown bstriner:class /scratch/bstriner
+
+
+
+sbatch --time=24:00:00 \
+    --partition=cpu \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_tensorboard.sh
+ssh -N -L 6006:stone-0-29:6006 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6007:stone-0-29:6007 bstriner@stoned.is.cs.cmu.edu
+ssh -N -L 6008:stone-0-29:6008 bstriner@stoned.is.cs.cmu.edu
+
+PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
+2gpu*        up 2-00:00:00      1  down* islpc39
+2gpu*        up 2-00:00:00      7   idle islpc[30-31,34-38]
+4gpu         up 2-00:00:00      1  alloc islpc52
+4gpu         up 2-00:00:00      3   idle islpc[50-51,53]
+
+./cuda_10.1.168_418.67_linux.run --silent --toolkit --installpath=/data/VOL3/bstriner/cuda/cuda-10.1
+./cuda_10.0.130_410.48_linux  --silent --toolkit --toolkitpath=/data/VOL3/bstriner/cuda/cuda-10.0
+./cuda_10.0.130.1_linux.run  --silent --accept-eula --installdir=/data/VOL3/bstriner/cuda/cuda-10.0
+
+
+echo ${PATH}
+echo ${LD_LIBRARY_PATH}
+echo ${CUDA_HOME}
+
+export PATH=/data/VOL3/bstriner/cuda/cuda-10.1/bin:$PATH
+export LD_LIBRARY_PATH=/data/VOL3/bstriner/cuda/cuda-10.1/lib64:$LD_LIBRARY_PATH
+export CUDA_HOME=/data/VOL3/bstriner/cuda/cuda-10.1
+
+export PATH=/data/VOL3/bstriner/cuda/cuda-10.0/bin:$PATH
+export LD_LIBRARY_PATH=/data/VOL3/bstriner/cuda/cuda-10.0/lib64:$LD_LIBRARY_PATH
+export CUDA_HOME=/data/VOL3/bstriner/cuda/cuda-10.0
+
+srun --partition=4gpu --nodelist=islpc50 --pty bash
+python3 -m venv --without-pip /data/VOL3/bstriner/pyvenv-islpc
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+
+srun --partition=4gpu --nodelist=islpc51 --gres=gpu:1 --pty bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+python -c "import tensorflow as tf; print(tf.test.is_gpu_available())"
+
+
+sbatch --partition=4gpu --nodelist=islpc51 \
+<<EOF
+#!/bin/sh
+mkdir -p /tmp/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords /tmp/bstriner/wsj-data
+EOF
+
+
+sbatch --time=48:00:00 \
+    --job-name="wsj-tensorboard-fbank" \
+    --partition=cpu \
+    --nodelist=stone-0-29 \
+    --mem=40G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+<<EOF
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+python -m tensorboard.main \
+    --logdir=/data/VOL3/bstriner/asr-vae/output/wsj/ctc/fbank \
+    --port=6006 \
+    > /data/VOL3/bstriner/asr-vae/logs/tb.out \
+    2>&1
+EOF
+
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+python -c "import tensorflow as tf; print(tf.test.is_gpu_available())"
+
+ wsj-dim320-depth5-lr3e-4-bnbatch_renorm-vTrue-vmFalse-vlpFalse-prior0.1-do0.0
+ wsj-dim320-depth5-lr3e-4-bnbatch_renorm-vTrue-vmFalse-vlpFalse-prior0.1-do0.1
+
+DIM=512
+DEPTH=6
+LR=3e-4
+BATCHNORM=batch_norm
+VARIATIONAL=False
+VARIATIONAL_MEAN=False
+VARIATIONAL_LEARN_PRIOR=False
+DROPOUT=0.0
+UOUT=False
+JOB_NAME="wsj-dim${DIM}-depth${DEPTH}-lr${LR}-bn${BATCHNORM}-v${VARIATIONAL}-vm${VARIATIONAL_MEAN}-vlp${VARIATIONAL_LEARN_PRIOR}-prior0.1-do${DROPOUT}${UOUT}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=2gpu \
+    --nodelist=islpc30 \
+    --mem=10G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv-islpc/bin/activate
+source /data/VOL3/bstriner/cuda/cuda-10.0/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python3.6 /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.py \
+    --config="conf/wsj_ctc_variational.json" \
+    --model_dir="../../output/wsj/ctc-variational-v3/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=50000 \
+    --hparams="decoder_uout=${UOUT},decoder_dropout=${DROPOUT},variational=${VARIATIONAL},variational_sigma_prior=0.1,variational_mean=${VARIATIONAL_MEAN},variational_learn_prior=${VARIATIONAL_LEARN_PRIOR},clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR},batch_norm=${BATCHNORM},batch_norm_scale=True" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords/test_dev93" \
+    > "/data/VOL3/bstriner/asr-vae/logs/variational-v3/${JOB_NAME}.txt" \
+    2>&1
+EOF
+
+
+
+
+
+DIM=320
+DEPTH=5
+LR=3e-5
+for BATCHNORM in none batch_norm
+do
+VARIATIONAL=False
+VARIATIONAL_MEAN=False
+VARIATIONAL_LEARN_PRIOR=False
+JOB_NAME="wsj-dim${DIM}-depth${DEPTH}-lr${LR}-bn${BATCHNORM}-v${VARIATIONAL}-vm${VARIATIONAL_MEAN}-vlp${VARIATIONAL_LEARN_PRIOR}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --mem-per-cpu=10G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/sh
+singularity exec --nv \
+    /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/variational/${JOB_NAME}.txt" \
+    --config="conf/wsj_ctc_variational.json" \
+    --model_dir="../../output/wsj/ctc-variational/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="variational=${VARIATIONAL},variational_mean=${VARIATIONAL_MEAN},variational_learn_prior=${VARIATIONAL_LEARN_PRIOR},clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR},batch_norm=${BATCHNORM},batch_norm_scale=True" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+EOF
+
+VARIATIONAL=True
+for VARIATIONAL_MEAN in True False
+do
+for VARIATIONAL_LEARN_PRIOR in True False
+do
+JOB_NAME="wsj-dim${DIM}-depth${DEPTH}-lr${LR}-bn${BATCHNORM}-v${VARIATIONAL}-vm${VARIATIONAL_MEAN}-vlp${VARIATIONAL_LEARN_PRIOR}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --mem-per-cpu=10G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/sh
+singularity exec --nv \
+    /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/variational/${JOB_NAME}.txt" \
+    --config="conf/wsj_ctc_variational.json" \
+    --model_dir="../../output/wsj/ctc-variational/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="variational=${VARIATIONAL},variational_mean=${VARIATIONAL_MEAN},variational_learn_prior=${VARIATIONAL_LEARN_PRIOR},clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR},batch_norm=${BATCHNORM},batch_norm_scale=True" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+EOF
+done
+done
+done
+
+
+
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --mem-per-cpu=10G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train_singularity.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt" \
+    --config="conf/wsj_ctc_variational.json" \
+    --model_dir="../../output/wsj/ctc-variational/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="variational=${VARIATIONAL},variational_mean=${VARIATIONAL_MEAN},variational_learn_prior=${VARIATIONAL_LEARN_PRIOR},clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR},batch_norm=${BATCHNORM},batch_norm_scale=True" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+# Testing batchnorm
+DIM=320
+DEPTH=5
+LR=3e-5
+for BATCHNORM in none batch_norm time_norm channel_norm layer_norm
+do
+JOB_NAME="wsj-dim-${DIM}-depth-${DEPTH}-lr-${LR}-bn-${BATCHNORM}"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR},batch_norm=${BATCHNORM},batch_norm_scale=True" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+done
+
+
+DIM=320
+DEPTH=5
+LR=3e-5
+BATCHNORM=batch_norm
+for BATCHNORM in  none batch_norm time_norm channel_norm layer_norm
+do
+JOB_NAME="wsj-dim-${DIM}-depth-${DEPTH}-lr-${LR}-bn-${BATCHNORM}-variational-v6-mean"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_variational.json" \
+    --model_dir="../../output/wsj/ctc-variational/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR},batch_norm=${BATCHNORM},batch_norm_scale=True" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+done
+
+
+
+JOB_NAME="wsj-ctc-vae-constlen-new-1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=128,decoder_depth=3,encoder_dim=128,encoder_depth=3,lr=3e-4,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-1,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="wsj-ctc-vae-constlen-new-2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=128,decoder_depth=3,encoder_dim=128,encoder_depth=3,lr=3e-4,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-2,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="wsj-ctc-vae-constlen-new-256-6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps_without_decrease=40000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,encoder_dim=128,encoder_depth=3,lr=3e-4,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-1,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="wsj-ctc-vae-constlen-new-256-6-128-3-lr-3e-5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps_without_decrease=40000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,encoder_dim=128,encoder_depth=3,lr=3e-5,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-1,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="wsj-ctc-vae-constlen-new-256-6-128-2-lr-3e-5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps_without_decrease=40000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,encoder_dim=128,encoder_depth=2,lr=3e-5,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-1,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="wsj-ctc-vae-constlen-new-512-6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps_without_decrease=40000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=512,decoder_depth=6,encoder_dim=256,encoder_depth=3,lr=3e-4,latent_dim=128,anneal_start=30000,anneal_end=60000,anneal_min=1e-1,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+DIM=512
+DEPTH=6
+LR=3e-4
+JOB_NAME="wsj-dim-${DIM}-depth-${DEPTH}-lr-${LR}"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR}" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+DIM=256
+DEPTH=6
+LR=3e-5
+JOB_NAME="wsj-dim-${DIM}-depth-${DEPTH}-lr-${LR}-residual"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="residual=True,clip_gradient_value=0.1,clip_gradient_norm=0.0,batch_norm=False,skipconnect=False,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR}" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+DIM=256
+DEPTH=6
+LR=3e-4
+JOB_NAME="wsj-dim-${DIM}-depth-${DEPTH}-lr-${LR}-residual-bn-v3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=40000 \
+    --hparams="residual=True,clip_gradient_value=0.1,clip_gradient_norm=0.0,batch_norm=True,skipconnect=False,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR}" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-aae-constlen-v1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_aae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=1e-5,dis_lr=3e-5,discriminator_steps=5,latent_dim=256,anneal_start=40000,anneal_end=80000,anneal_min=1.0,anneal_max=100.0,penalty_weight=100.0,discriminator_dim=320,discriminator_depth=3" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-constlen-v1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=3e-5,latent_dim=256,anneal_start=40000,anneal_end=80000,anneal_min=1e-3,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-constlen-v3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=3e-6,latent_dim=256,anneal_start=40000,anneal_end=80000,anneal_min=1e-3,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-constlen-v3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.01,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=3e-6,latent_dim=256,anneal_start=40000,anneal_end=80000,anneal_min=1e-3,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-constlen-new-256-6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,encoder_dim=128,encoder_depth=3,lr=3e-6,latent_dim=256,anneal_start=40000,anneal_end=80000,anneal_min=1e-3,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-mm-v1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=1.0,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,gating_dim=320,gating_depth=3,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-mm-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=1.0,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=2,gating_dim=320,gating_depth=2,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-mm-v3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=1.0,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=5,gating_dim=320,gating_depth=2,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-mm-v4"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,gating_dim=320,gating_depth=2,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-mm-v5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,gating_dim=320,gating_depth=2,lr=0.0003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-mm-v6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-mm-v7"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.01,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=3,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-mm-v8"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.01,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=5,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="wsj-ctc-mm-v9"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-mm/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=128,decoder_depth=3,lr=3e-4,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="wsj-ctc-mm-256-6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-mm/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps_without_decrease=40000 \
+    --max_steps=400000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,lr=3e-4,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="wsj-ctc-mm-512-6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-mm/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps_without_decrease=80000 \
+    --max_steps=400000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=512,decoder_depth=6,lr=3e-4,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="wsj-ctc-mm-256-6"
+nohup python3.7 wsj_train.py \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-mm/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,lr=3e-4,mm_size=4" \
+    & disown
+
+
+JOB_NAME="wsj-ctc-mm-256-6"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:4 \
+    --time=48:00:00 \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_singularity.sh \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-mm/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,lr=3e-4,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93" \
+    --distribute
+
+
+JOB_NAME="wsj-ctc-mm-256-6-noclip"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:4 \
+    --time=48:00:00 \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_singularity.sh \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-mm/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.0,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,lr=3e-4,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93" \
+    --distribute
+
+
+for DIM in 128 256 384 512 640
+do
+for DEPTH in 3 4 5 6
+do
+
+DIM=384
+DEPTH=6
+
+for DIM in 128 256
+do
+
+for DEPTH in 3 4 5 6
+do
+
+DIM=256
+DEPTH=2
+JOB_NAME="dim-${DIM}-depth-${DEPTH}"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=20000 \
+    --hparams="decoder_dim=${DIM},decoder_depth=${DEPTH}" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+done
+done
+
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "ctc-vae-constlen-1" \
+    /data/VOL3/bstriner/asr-vae/logs/ctc-vae-constlen-1.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/ctc-vae-constlen-1" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "ctc-vae-constlen-2" \
+    /data/VOL3/bstriner/asr-vae/logs/ctc-vae-constlen-2.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/ctc-vae-constlen-2" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=0.1,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "ctc-vae-constlen-3" \
+    /data/VOL3/bstriner/asr-vae/logs/ctc-vae-constlen-3.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/ctc-vae-constlen-3" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=0.01,anneal_max=1.0,anneal_start=50000,anneal_end=100000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "ctc-vae-constlen-4" \
+    /data/VOL3/bstriner/asr-vae/logs/ctc-vae-constlen-4.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/ctc-vae-constlen-4" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=0.001,anneal_max=1.0,anneal_start=50000,anneal_end=100000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-constlen-5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=0.0001,anneal_max=1.0,anneal_start=50000,anneal_end=150000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-constlen-6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,k_min=0.001,anneal_min=0.00001,anneal_max=1.0,anneal_start=50000,anneal_end=150000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-constlen-7"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=256,decoder_depth=3,kl_min=0.001,anneal_min=0.00001,anneal_max=1.0,anneal_start=50000,anneal_end=150000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-vae-constlen-8"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=256,decoder_depth=3,encoder_dim=256,encoder_depth=3,kl_min=0.001,anneal_min=0.00001,anneal_max=1.0,anneal_start=50000,anneal_end=150000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-residual-constlen-1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_residual_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-residual-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-constlen-1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.00003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.000003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.0003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-4"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-constlen-5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003,clip_gradient_value=0.1" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=5,encoder_dim=320,encoder_depth=3,lr=0.00003,clip_gradient_value=0.1" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-constlen-7"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.000003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-constlen-8"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.000003,clip_gradient_value=0.1" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-9"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.00003,clip_gradient_value=1.0,clip_gradient_norm=0.0,latent_tile_scale=0.01" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-10"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.000003,clip_gradient_value=1.0,clip_gradient_norm=0.0,latent_tile_scale=0.01" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-11"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.0003,clip_gradient_value=1.0,clip_gradient_norm=0.0,latent_tile_scale=0.01" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-12"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.0003,clip_gradient_value=0.1,clip_gradient_norm=0.0,latent_tile_scale=0.01" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-13"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003,clip_gradient_value=0.1,clip_gradient_norm=0.0,latent_tile_scale=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-constlen-14"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_constlen.json" \
+    --model_dir="../../output/wsj/ctc-ae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003,clip_gradient_value=0.01,clip_gradient_norm=0.0,latent_tile_scale=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-1-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.0003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-2-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.00003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-3-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.000003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-4-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=2,encoder_dim=320,encoder_depth=2,lr=0.0003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-5-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=5,encoder_dim=512,encoder_depth=2,lr=0.0003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-6-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0,clip_gradient_norm=0.1,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+JOB_NAME="ctc-ae-skipconnect-value-v1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-value-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=1.0,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-value-v3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=1.0,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-value-v4"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=1.0,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.0003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-value-v5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.0003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-skipconnect-value-v6"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=1.0,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.000003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-value-v7"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.000003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-skipconnect-norm-v1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0,clip_gradient_norm=0.1,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-norm-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0,clip_gradient_norm=0.1,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.0003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-norm-v3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0,clip_gradient_norm=1.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.0003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+JOB_NAME="ctc-ae-skipconnect-norm-v4"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0,clip_gradient_norm=0.1,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-norm-v5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0,clip_gradient_norm=1.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=2,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-skipconnect-value-bn-v1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_bn.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-skipconnect-norm-bn-v1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_bn.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0,clip_gradient_norm=0.1,latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.00003" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+JOB_NAME="ctc-ae-bn-1-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_bn.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.0003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-bn-2-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_bn.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.00003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-bn-3-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_bn.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=3,encoder_dim=320,encoder_depth=3,lr=0.000003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+JOB_NAME="ctc-ae-bn-4-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_bn.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=2,encoder_dim=320,encoder_depth=2,lr=0.0003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-ae-bn-5-v2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_ae_bn.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="latent_dim=256,attention_dim=256,decoder_dim=320,decoder_depth=5,encoder_dim=512,encoder_depth=2,lr=0.0003,clip_gradient_value=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+
+# CTC VAE
+
+
+JOB_NAME="ctc-vae-1"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=1.0,anneal_max=1.0,anneal_start=50000,anneal_end=100000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-2"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=0.1,anneal_max=1.0,anneal_start=50000,anneal_end=100000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+JOB_NAME="ctc-vae-3"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=0.01,anneal_max=1.0,anneal_start=50000,anneal_end=100000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+
+JOB_NAME="ctc-vae-4"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="anneal_min=0.001,anneal_max=1.0,anneal_start=50000,anneal_end=100000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+JOB_NAME="ctc-vae-5"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_vae.json" \
+    --model_dir="../../output/wsj/ctc-vae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="lr=1e-4,kl_min=0.001,anneal_min=0.0001,anneal_max=1.0,anneal_start=50000,anneal_end=150000" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+
+
+
+
+
+for
+
+
+mkdir -p /tmp/asr-vae-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj /tmp/asr-vae-data
+
+
+for JOBID in 84 85 74 75 76 77 78 79 80 81 82
+do
+scontrol update jobid=$JOBID TimeLimit=48:00:00
+done
+
+
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+
+
+DIM=320
+DEPTH=5
+rm nohup.out
+
+sinfo
+squeue
+
+run --partition=cpu --pty bash
+
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_singularity_tensorboard.sh
+
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_singularity_tensorboard.sh
+
+
+singularity shell \
+    /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg
+
+
+./configure --prefix=/data/VOL3/bstriner/local/zlib-1.2.11-local
+make && make install
+
+make configure
+./configure --prefix=/data/VOL3/bstriner/local/git-2.22.0-local
+make && make install
+
+
+
+./configure --prefix=/data/VOL3/bstriner/local/curl-7.65.1-local
+
+./buildconf
+./configure --prefix=/data/VOL3/bstriner/local/curl-7.65.1-local
+make && make install
+export PATH=/data/VOL3/bstriner/local/curl-7.65.1-local/bin:$PATH
+
+
+export PATH=/data/VOL3/bstriner/local/cmake-3.14.5-Linux-x86_64/bin:$PATH
+
+
+export PATH=/data/VOL3/bstriner/local/bin:$PATH
+export PATH=/data/VOL3/bstriner/local/git-2.22.0-local/bin:$PATH
+
+#Build TF
+srun --partition=cpu --time=24:00:00 --pty bash
+source /data/VOL3/bstriner/venv/${SLURMD_NODENAME}/bin/activate
+export PATH=/data/VOL3/bstriner/local/cmake-3.14.5-Linux-x86_64/bin:$PATH
+export PATH=/data/VOL3/bstriner/local/bin:$PATH
+export PATH=/data/VOL3/bstriner/local/git-2.22.0-local/bin:$PATH
+cd /data/VOL3/bstriner/tensorflow
+./configure
+bazel clean
+nohup bazel build --jobs=8 --config=opt //tensorflow/tools/pip_package:build_pip_package > build.out & disown
+./bazel-bin/tensorflow/tools/pip_package/build_pip_package --nightly_flag /data/VOL3/bstriner/tensorflow_cpu_pkg
+python3.6 -m pip install /data/VOL3/bstriner/tensorflow_cpu_pkg/*.whl
+
+
+./bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
+
+singularity build tf-nightly-cpu.simg docker://tensorflow/tensorflow:nightly
+singularity build 10.0-tf-nightly.simg shub://bstriner/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04:tf-nightly
+
+
+tensorboard --logdir=/data/VOL3/bstriner/asr-vae/output
+
+export CFLAGS="-I/data/VOL3/bstriner/local/curl-7.65.1-local/include -L/data/VOL3/bstriner/local/curl-7.65.1-local/lib -I/data/VOL3/bstriner/local/zlib-1.2.11-local/include -L/data/VOL3/bstriner/local/zlib-1.2.11-local/lib"
+
+$ sudo make install
+
+python3.6 -m venv /data/VOL3/bstriner/pyvenv
+source /data/VOL3/bstriner/pyvenv/bin/activate
+
+python3.6 -m pip install --upgrade pip six numpy wheel setuptools mock future
+python3.6 -m pip install --upgrade keras_applications
+python3.6 -m pip install --upgrade keras_preprocessing
+
+
+python3.6 -m venv /data/VOL3/bstriner/venv/${SLURMD_NODENAME}
+source /data/VOL3/bstriner/venv/${SLURMD_NODENAME}/bin/activate
+python3.6 -m pip install --upgrade pip
+python3.6 -m pip install tf-nightly
+python3.6 -m tensorboard.main --logdir /data/VOL3/bstriner/asr-vae/output
+./bazel-bin/tensorboard/tensorboard --logdir /data/VOL3/bstriner/asr-vae/output
+dmesg
+
+/data/VOL3/bstriner/venv/stone-0-29/bin/python3.6
+
+# Tensorboard
+ssh -N -L 6006:stone-0-25:6006 bstriner@stoned.is.cs.cmu.edu
+sbatch --time=24:00:00 \
+    --partition=gpu \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_singularity_tensorboard.sh
+
+do
+
+DEPTH=3
+
+DIM=512
+
+for DIM in 128 256 384 512
+do
+for DEPTH in 3 4 5
+do
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "ctc-dim${DIM}-depth${DEPTH}" \
+    /data/VOL3/bstriner/asr-vae/logs/dim-${DIM}-depth-${DEPTH}.txt \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/dim-${DIM}-depth-${DEPTH}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=60000 \
+    --hparams="decoder_dim=${DIM},decoder_depth=${DEPTH}" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"
+done
+done
+
+
+
+DIM=128
+DEPTH=3
+
+for DIM in 128 256
+do
+for DEPTH in 3 4 5
+do
+python3.7 wsj_train.py \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/dim-${DIM}-depth-${DEPTH}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=50000 \
+    --hparams="decoder_dim=${DIM},decoder_depth=${DEPTH}"
+end
+end
+
+
+nohup python3.7 wsj_train.py \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/dim-${DIM}-depth-${DEPTH}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=50000 \
+    --hparams="decoder_dim=${DIM},decoder_depth=${DEPTH}" & disown
+
+tail -f nohup.out
+
+nohup tensorboard --logdir ../../output/wsj > tb.out & disown
+
+DIM=320
+DEPTH=5
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_qsub.sh \
+    nodes=compute-0-36:ppn=1,gpus=1 \
+    "/data/VOL3/bstriner/asr-vae/logs/dim-${DIM}-depth-${DEPTH}.txt \
+    --config=\"conf/wsj_ctc.json\" \
+    --model_dir=\"../../output/wsj/ctc/dim-${DIM}-depth-${DEPTH}\" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=50000 \
+    --hparams=\"decoder_dim=${DIM},decoder_depth=${DEPTH}\""
+
+
+
+./wsj_qsub.sh nodes=compute-0-36:ppn=4,gpus=4 \
+    /data/VOL3/bstriner/asr-vae/logs/job2.txt \
+    --config='conf/wsj_ctc.json' \
+    --model_dir='../../output/wsj/ctc/v1' \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000
+
+
+qsub \
+    -m ea -M bstriner@cs.cmu.edu \
+    -q gpu \
+    -l nodes=compute-0-36:ppn=4,gpus=4 \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_singularity.sh \
+    -F "/data/VOL3/bstriner/asr-vae/logs/job2.txt --config='conf/wsj_ctc.json' --model_dir='../../output/wsj/ctc/v1'     --train_batch_size=16     --eval_batch_size=16     --save_summary_steps=200      --save_checkpoints_steps=2000"
+
+
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae:$PYTHONPATH
+python3 wsj_train.py \
+        --config='conf/wsj_ctc.json' \
+        --model_dir='../../output/wsj/ctc/v1' \
+        --train_batch_size=32 \
+        --eval_batch_size=32 \
+        --save_summary_steps=200  \
+        --save_checkpoints_steps=2000 > wsj_train_ctc.out 2>&1
+
+
+https://ftp.gnu.org/gnu/binutils/binutils-2.32.tar.gz
+
+docker pull bstriner/cuda-10.1-cudnn7-devel-ubuntu16.04
+docker pull bstriner/cuda-10.0-cudnn7-devel-ubuntu16.04
+docker push bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:27
+wget https://dl.google.com/go/go1.12.6.src.tar.gz
+ go get -u -v github.com/golang/dep/cmd/dep
+qsub -I -q gpu -l nodes=compute-0-27
+qsub -I -q gpu -l nodes=compute-0-36
+qsub -I -q gpu -l nodes=compute-0-38
+
+export GOROOT=/usr/share/go
+export GOPATH=/home/ben/go
+export GOROOT_BOOTSTRAP=/usr
+./all.bash
+https://dl.google.com/go/go1.12.6.linux-amd64.tar.gz
+cd $COMPUTE_ENV/texinfo-6.6
+./configure --prefix=$COMPUTE_ENV && make clean && make && make install
+
+./configure --disable-makeinstall-chown --prefix=/data/VOL3/bstriner/singularity/util-linux-local && make clean && make install
+https://github.com/sylabs/singularity/releases/download/v3.3.0-rc.1/singularity-3.3.0.tar.gz
+export PKG_CONFIG_PATH=/data/VOL3/bstriner/singularity/util-linux-local/lib/pkgconfig
+export LD_LIBRARY_PATH=/data/VOL3/bstriner/singularity/util-linux-local/lib
+export LD_RUN_PATH=/data/VOL3/bstriner/singularity/util-linux-local/lib
+export CPATH=/data/VOL3/bstriner/singularity/util-linux-local/include
+export C_INCLUDE_PATH=/data/VOL3/bstriner/singularity/util-linux-local/include
+export CPLUS_INCLUDE_PATH=/data/VOL3/bstriner/singularity/util-linux-local/include
+
+## Singularity
+export PATH=/data/VOL3/bstriner/singularity/util-linux-local/bin:/data/VOL3/bstriner/singularity/go/bin:$PATH
+export CFLAGS="-O3 -I/data/VOL3/bstriner/singularity/util-linux-local/include -L/data/VOL3/bstriner/singularity/util-linux-local/lib"
+cd /data/VOL3/bstriner/singularity/singularity-3.2.1
+./mconfig --without-suid --prefix=/data/VOL3/bstriner/singularity/singularity-3.2.1-local
+./mconfig --prefix=/data/VOL3/bstriner/singularity/singularity-3.2.1-local
+make -C ./builddir install
+export PATH=/data/VOL3/bstriner/singularity/singularity-3.2.1-local/bin:$PATH
+hash -r
+singularity version
+
+cd /data/VOL3/bstriner/singularity/singularity-3.3.0
+./mconfig --prefix=/data/VOL3/bstriner/singularity/singularity-3.3.0-local
+make -C ./builddir install
+export PATH=/data/VOL3/bstriner/singularity/singularity-3.3.0-local/bin:$PATH
+hash -r
+singularity version
+
+./mconfig --without-suid --prefix=/mnt/data/projects/singularity/singularity-local
+
+export PATH=/data/VOL3/bstriner/singularity/singularity-local/bin:$PATH
+
+
+export COMPUTE_INCLUDE=/data/VOL3/bstriner/singularity/util-linux-local/include
+c
+singularity build ubuntu.img shub://singularityhub/ubuntu
+singularity shell ubuntu.img
+
+
+singularity build 10.0-tf-nightly.simg docker://bstriner/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04:tf-nightly
+
+cd /data/VOL3/bstriner/singularity/images
+singularity build 10.0-tf-nightly.simg shub://bstriner/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04:tf-nightly
+singularity build 10.1-tf-nightly.simg shub://bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:tf-nightly
+ln -s 10.0-tf-nightly.simg compute-0-36.simg
+ln -s 10.0-tf-nightly.simg compute-0-38.simg
+ln -s 10.1-tf-nightly.simg compute-0-27.simg
+
+
+singularity build 10.1-36.img docker://bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:36
+
+singularity shell -B /data/VOL3/bstriner/asr-vae:/asr-vae --nv 10.0-tf-nightly.img
+singularity shell -B /data/VOL3/bstriner/asr-vae:/asr-vae --nv 10.1-tf-nightly.img
+export PYTHONPATH=/asr-vae
+cd /asr-vae/experiments/wsj
+python3 wsj_train.py
+
+singularity shell -B /data/VOL3/bstriner/asr-vae:/asr-vae --nv 10.0-tf-nightly.img
+
+singularity shell --nv 10.0-tf-nightly.img
+singularity shell --nv 10.1-tf-nightly.img
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+cd /data/VOL3/bstriner/asr-vae/experiments/wsj
+python3 wsj_train.py
+
+
+cd /data/VOL3/bstriner/singularity/images
+docker build . -t bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:27
+docker login
+docker push bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:27
+docker run -it bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:27
+
+docker run --runtime=nvidia -it -v /mnt/data/projects/asr-vae:/asr-vae bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:36
+
+export PYTHONPATH=/asr-vae
+cd /asr-vae/experiments/wsj
+python3 wsj_train.py
+
+cd $COMPUTE_ENV/gmp-6.1.2
+./configure --disable-shared --enable-static --prefix=$COMPUTE_ENV && make clean && make && make check && make install
+sed -i "s/from tensorflow.python.platform.googletest import mock/import mock/" "/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/test/__init__.py"
+
+singularity shell --nv 10.1-36.img
+python3 -c "import tensorflow"
+
+
+singularity exec \
+    -B /mnt/data/projects/singularity/images/mock:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/compat/v1/test \
+    -B /mnt/data/projects/singularity/images/mock:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/test \
+    --nv 10.1-36.img python3 -c "import tensorflow"
+
+
+singularity shell \
+    -B /mnt/data/projects/asr-vae:/asr-vae \
+    -B /mnt/data/projects/singularity/images/mock:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/compat/v1/test \
+    -B /mnt/data/projects/singularity/images/mock:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/test \
+    --nv 10.1-36.img python3 -c "import tensorflow"
+
+cd $COMPUTE_ENV/mpfr-4.0.2
+./configure --disable-shared --enable-static --with-gmp=$COMPUTE_ENV --prefix=$COMPUTE_ENV && make clean && make && make check && make install
+
+cd $COMPUTE_ENV/mpc-1.1.0
+./configure --disable-shared --enable-static --with-gmp=$COMPUTE_ENV --prefix=$COMPUTE_ENV && make clean && make && make check && make install
+
+cd $COMPUTE_ENV/gcc-4.9.4
+./contrib/download_prerequisites
+rm -Rf $COMPUTE_ENV/gcc-build
+mkdir -p $COMPUTE_ENV/gcc-build
+cd $COMPUTE_ENV/gcc-build
+../gcc-4.9.4/configure --enable-shared --enable-threads=posix --enable-__cxa_atexit --disable-multilib --enable-languages=c,c++,fortran,go --prefix=$COMPUTE_ENV
+make -j 4 && make install > install.txt
+
+singularity version 3.0.3-1.el6
+ldconfig -p | grep cudnn
+        libcudnn.so.7 (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libcudnn.so.7
+        libcudnn.so (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libcudnn.so
+
+
+# Environment
+
+unset LIBRARY_PATH CPATH C_INCLUDE_PATH PKG_CONFIG_PATH CPLUS_INCLUDE_PATH INCLUDE LD_LIBRARY_PATH
+export COMPUTE_NAME=`hostname | sed 's/\..*//'`
+export COMPUTE_ENV=/data/VOL3/bstriner/local/$COMPUTE_NAME
+export PATH=$COMPUTE_ENV/bin:$PATH
+export PKG_CONFIG_PATH=$COMPUTE_ENV/lib/pkgconfig:$PKG_CONFIG_PATH
+export COMPUTE_LIB=$COMPUTE_ENV/lib64
+export COMPUTE_LIB=$COMPUTE_ENV/lib
+export LIBRARY_PATH=$COMPUTE_LIB:/opt/openmpi/lib
+export LD_LIBRARY_PATH=$LIBRARY_PATH
+export LD_RUN_PATH=$LIBRARY_PATH
+export COMPUTE_INCLUDE=$COMPUTE_ENV/include
+export CPATH=$COMPUTE_INCLUDE
+export C_INCLUDE_PATH=$COMPUTE_INCLUDE
+export CPLUS_INCLUDE_PATH=$COMPUTE_INCLUDE
+export INCLUDE=$COMPUTE_INCLUDE
+
+source /data/VOL3/bstriner/venv/$COMPUTE_NAME/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae:PYTHONPATH
+LD_LIBRARY_PATH=$COMPUTE_ENV/lib LD_RUN_PATH=$COMPUTE_ENV/lib  python3 -c "import tensorflow"
+
+ Not using XLA:CPU for cluster because
+
+export TF_XLA_FLAGS=--tf_xla_cpu_global_jit
+
+  envvar TF_XLA_FLAGS=--tf_xla_cpu_global_jit was not set.
+  If you want XLA:CPU, either set that envvar,
+  or use experimental_jit_scope to enable XLA:CPU.
+  To confirm that XLA is active, pass --vmodule=xla_compilation_cache=1
+  (as a proper command-line flag, not via TF_XLA_FLAGS) or set
+  the envvar XLA_FLAGS=--xla_hlo_profile.
+
+
+cat /proc/cpuinfo > /data/VOL3/bstriner/env/cpuinfo-$COMPUTE_NAME.txt
+Can't open configuration file /data/VOL3/bstriner/local/compute-0-27/etc/ld.so.conf
+# Installation
+
+ The TensorFlow library was compiled to use AVX2 instructions, but these aren't available on your machine
+
+Auto-Configuration Warning: 'TMP' environment variable is not set, using 'C:\Windows\Temp' as default
+s
+
+
+unset LIBRARY_PATH CPATH C_INCLUDE_PATH PKG_CONFIG_PATH CPLUS_INCLUDE_PATH INCLUDE LD_LIBRARY_PATH
+cd /data/VOL3/bstriner/local/gcc-4.9.4
+./contrib/download_prerequisites
+rm -Rf /data/VOL3/bstriner/local/gcc-4.9.4-build
+mkdir -p /data/VOL3/bstriner/local/gcc-4.9.4-build
+cd /data/VOL3/bstriner/local/gcc-4.9.4-build
+../gcc-4.9.4/configure --enable-shared --enable-threads=posix --enable-__cxa_atexit --disable-multilib --enable-languages=c,c++,fortran,go --prefix=/data/VOL3/bstriner/local/gcc-4.9.4-local
+make -j 8 && make install
+
+shutdown during gcc build 6/20
+
+hash -r
+gcc --version
+
+export CFLAGS="-O3 -Wno-narrowing"
+export CPPFLAGS="-O3 -Wno-narrowing"
+export CXXFLAGS="-O3 -Wno-narrowing"
+
+export CXXFLAGS=-Wno-narrowing
+export CFLAGS=-Wno-narrowing
+
+
+
+## GCC
+cd $COMPUTE_ENV/gcc-9.1.0
+./contrib/download_prerequisites
+rm -Rf $COMPUTE_ENV/gcc-build
+mkdir -p $COMPUTE_ENV/gcc-build
+cd $COMPUTE_ENV/gcc-build
+../gcc-9.1.0/configure --enable-shared --enable-threads=posix --enable-__cxa_atexit --disable-multilib --enable-languages=c,c++,fortran,go --prefix=$COMPUTE_ENV
+make -j 8 && make install
+hash -r
+gcc --version
+
+## make
+rm -Rf $COMPUTE_ENV/make-build
+mkdir -p $COMPUTE_ENV/make-build
+cd $COMPUTE_ENV/make-build
+../make-4.2/configure --prefix=/$COMPUTE_ENV
+make -j 8 && make install
+rm $COMPUTE_ENV/bin/gmake
+ln -s $COMPUTE_ENV/bin/make $COMPUTE_ENV/bin/gmake
+hash -r
+make --version
+gmake --version
+
+
+## binutils
+rm -Rf $COMPUTE_ENV/binutils-build
+mkdir -p $COMPUTE_ENV/binutils-build
+cd $COMPUTE_ENV/binutils-build
+../binutils-2.32/configure --prefix=/$COMPUTE_ENV --enable-gold --enable-ld=default --enable-plugins --enable-shared --disable-werror --with-system-zlib
+make -j 8 && make install
+hash -r
+as --version
+
+
+## binutils
+rm -Rf $COMPUTE_ENV/binutils-build
+mkdir -p $COMPUTE_ENV/binutils-build
+cd $COMPUTE_ENV/binutils-build
+../binutils-2.28/configure --prefix=/$COMPUTE_ENV --enable-gold --enable-ld=default --enable-plugins --enable-shared --disable-werror --with-system-zlib
+make -j 8 && make install
+hash -r
+as --version
+
+
+## bison
+rm -Rf $COMPUTE_ENV/bison-build
+mkdir -p $COMPUTE_ENV/bison-build
+cd $COMPUTE_ENV/bison-build
+../bison-3.4/configure --prefix=/$COMPUTE_ENV
+make -j 8 && make install
+hash -r
+bison --version
+
+
+../../glibc-2.17/configure --prefix=$COMPUTE_ENV --disable-werror
+
+echo $COMPUTE_ENV
+
+cd /data/VOL3/bstriner/local
+rm -Rf glibc-2.17-build
+mkdir glibc-2.17-build
+cd glibc-2.17-build
+../glibc-2.17/configure --prefix=/data/VOL3/bstriner/local/glibc-2.17-local --disable-werror
+make -j 8 install
+
+
+../glibc-2.17/configure --enable-ldconfig=yes --prefix=/data/VOL3/bstriner/env/glibc-2.17-local --disable-werror
+
+echo $LD_RUN_PATH
+echo $LD_LIBRARY_PATH
+ls /data/VOL3/bstriner/env/glibc-2.17-local/lib
+LD_LIBRARY_PATH=/data/VOL3/bstriner/env/glibc-2.17-local/lib:/opt/openmpi/lib ./bazel-0.26.1-linux-x86_64
+
+
+/usr/bin/install -c /data/VOL3/bstriner/local/glibc-2.17-build/elf/ldconfig /data/VOL3/bstriner/env/glibc-2.17-local/sbin/ldconfig.new
+mv -f /data/VOL3/bstriner/env/glibc-2.17-local/sbin/ldconfig.new /data/VOL3/bstriner/env/glibc-2.17-local/sbin/ldconfig
+m
+
+../../glibc-2.17/configure --enable-ldconfig=yes --prefix=$COMPUTE_ENV --disable-werror
+
+../../glibc-2.17/configure --enable-ldconfig=yes --prefix=/data/VOL3/bstriner/env/glibc-2.17-local --disable-werror
+
+make -j 8 && make install
+/data/VOL3/bstriner/local/compute-0-27/libexec/pt_chown
+
+
+python3 -c "import tensorflow"
+
+## glibc
+module load python34 python34-extras
+rm -Rf $COMPUTE_ENV/glibc-build
+mkdir -p $COMPUTE_ENV/glibc-build
+cd $COMPUTE_ENV/glibc-build
+../glibc-2.23/configure --prefix=$COMPUTE_ENV --disable-werror
+make -j 8 && make install
+hash -r
+ldd --version
+
+../glibc-2.29/configure --prefix=$COMPUTE_ENV
+
+## libffi
+cd $COMPUTE_ENV/libffi-3.2.1
+./configure --prefix=$COMPUTE_ENV && make clean && make && make install
+
+# openssl
+cd $COMPUTE_ENV/openssl-1.1.1c
+./config --prefix=$COMPUTE_ENV --openssldir=$COMPUTE_ENV && make clean && make && make install
+
+# Python
+hash -r
+cd $COMPUTE_ENV/Python-3.7.3
+./configure --prefix=$COMPUTE_ENV --enable-optimizations && make clean && make && make install
+
+python3 -m pip install --upgrade pip
+python3 -m pip install --upgrade numpy h5py tqdm keras_applications keras_preprocessing
+python3 -m pip install --upgrade cffi cython setuptools wheel dill
+python3 -m pip install --upgrade matplotlib mock pysoundfile pandas
+python3 -m pip install --upgrade tf-nightly-gpu tfp-nightly keras
+
+ version `GLIBC_2.14'
+
+https://ftp.gnu.org/gnu/bison/bison-3.4.tar.gz
+https://ftp.gnu.org/gnu/make/make-4.2.tar.gz
+
+
+
+--enable-64-bit-bfd
+
+
+ /data/VOL3/bstriner/env/compute-0-36/libexec/gcc/x86_64-unknown-linux-gnu/4.9.4
+
+
+
+--enable-languages=c,c++,fortran,go
+../gcc-9.1.0/configure --disable-bootstrap --disable-multilib --enable-languages=all --with-fpmath=sse --prefix=$COMPUTE_ENV
+make && make install
+
+unset LIBRARY_PATH CPATH C_INCLUDE_PATH PKG_CONFIG_PATH CPLUS_INCLUDE_PATH INCLUDE LD_LIBRARY_PATH
+
+ --disable-multilib --disable-shared --enable-static --enable-languages=all --disable-bootstrap --enable-libgomp  --enable-lto  --enable-threads=posix   --enable-tls  --with-gmp=$COMPUTE_ENV  --with-mpfr=$COMPUTE_ENV  --with-mpc=$COMPUTE_ENV --with-fpmath=sse
+make && make check && make install
+
+rm -Rf $COMPUTE_ENV/glibc-build
+mkdir -p $COMPUTE_ENV/glibc-build
+cd $COMPUTE_ENV/glibc-build
+../glibc-2.29/configure --disable-shared --enable-static --prefix=$COMPUTE_ENV
+make && make check && make install
+../glibc-2.29/configure --prefix=$COMPUTE_ENV
+  --disable-libstdcxx-pch
+  --enable-languages=all
+  --enable-libgomp
+  --enable-lto
+  --enable-threads=posix
+  --enable-tls
+  --with-gmp=/tmp/gcc
+  --with-mpfr=/tmp/gcc
+  --with-mpc=/tmp/gcc
+  --with-libelf=/tmp/gcc
+  --with-fpmath=sse
+
+../gcc-9.1.0/configure --prefix=$COMPUTE_ENV
+make && make install
+
+rm -Rf $COMPUTE_ENV/glibc-build
+mkdir -p $COMPUTE_ENV/glibc-build
+cd $COMPUTE_ENV/glibc-build
+../glibc-2.29/configure --prefix=$COMPUTE_ENV
+
+cd $COMPUTE_ENV/libffi-3.2.1
+./configure --prefix=$COMPUTE_ENV && make clean && make && make install
+cd $COMPUTE_ENV/openssl-1.1.1c
+./config --prefix=$COMPUTE_ENV --openssldir=$COMPUTE_ENV && make clean && make && make install
+
+unset LIBRARY_PATH CPATH C_INCLUDE_PATH PKG_CONFIG_PATH CPLUS_INCLUDE_PATH INCLUDE LD_LIBRARY_PATH
+export COMPUTE_NAME=`hostname | sed 's/\..*//'`
+export COMPUTE_ENV=/data/VOL3/bstriner/env/$COMPUTE_NAME
+export PATH=$COMPUTE_ENV/bin:$PATH
+export PKG_CONFIG_PATH=$COMPUTE_ENV/lib/pkgconfig:$PKG_CONFIG_PATH
+export COMPUTE_LIB=$COMPUTE_ENV/lib64
+export COMPUTE_LIB=$COMPUTE_ENV/lib
+export LIBRARY_PATH=$COMPUTE_LIB:/opt/openmpi/lib
+export LD_LIBRARY_PATH=$LIBRARY_PATH
+export LD_RUN_PATH=$LIBRARY_PATH
+export COMPUTE_INCLUDE=$COMPUTE_ENV/include
+export CPATH=$COMPUTE_INCLUDE
+export C_INCLUDE_PATH=$COMPUTE_INCLUDE
+export CPLUS_INCLUDE_PATH=$COMPUTE_INCLUDE
+export INCLUDE=$COMPUTE_INCLUDE
+
+echo $LIBRARY_PATH
+echo $LD_LIBRARY_PATH
+echo $LD_RUN_PATH
+echo $CPATH
+echo $C_INCLUDE_PATH
+echo $CPLUS_INCLUDE_PATH
+echo $INCLUDE
+
+
+export LIBFFI_INCLUDE=$COMPUTE_ENV/lib/libffi-3.2.1/include
+export C_INCLUDE_PATH=$LIBFFI_INCLUDE:$C_INCLUDE_PATH
+export CPLUS_INCLUDE_PATH=$LIBFFI_INCLUDE:$CPLUS_INCLUDE_PATH
+export PKG_CONFIG_PATH=$COMPUTE_ENV/lib/pkgconfig:$PKG_CONFIG_PATH
+export LDFLAGS="-L$COMPUTE_LIB"
+export CPPFLAGS="-I$LIBFFI_INCLUDE -I$LOCAL_INCLUDE"
+
+cd $COMPUTE_ENV/Python-3.7.3
+./configure --prefix=$COMPUTE_ENV --enable-optimizations && make clean && make && make install
+
+python3 -m pip install --upgrade pip
+python3 -m pip install --upgrade numpy h5py tqdm keras_applications keras_preprocessing
+python3 -m pip install --upgrade cffi cython setuptools wheel dill
+python3 -m pip install --upgrade matplotlib mock pysoundfile pandas
+python3 -m pip install --upgrade tf-nightly-gpu tfp-nightly keras
+
+./configure --prefix=/data/VOL3/bstriner/env/compute-0-27
+./configure --prefix=/data/VOL3/bstriner/env/compute-0-27 --enable-optimizations
+make && make install
+
+
+
+
+singularity build \
+    tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04.simg \
+    docker://bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:20190605
+
+
+singularity build \
+    tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04.simg \
+    docker://bstriner/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04:
+
+
+singularity build \
+    tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04.simg \
+    docker://bstriner/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04
+
+singularity shell --nv \
+    /data/VOL3/bstriner/singularity/tensorflow-cuda-10.0-cudnn7-devel-ubuntu16.04.simg
+Your CPU supports inst was not compiled to use: AVX2 FMA
+
+python3 -c "import tensorflow; print(tensorflow.test.is_gpu_available())"
+singularity shell /data/VOL3/bstriner/singularity/tensorflow-cuda-10.1-cudnn7-devel-ubuntu16.04.simg
+
+qsub -w e -l gpus=1 -q gpu -wd /data/VOL3/bstriner/gpus  -m ea -M bstriner@cs.cmu.edu -N bstriner-gputest /data/VOL3/bstriner/gpus/gpufile.sh
+naccesspolicy=SHARED
+qsub -w e -q gpu -N bstriner-gputest -l nodes=1:gpus=1 /data/VOL3/bstriner/gpus/gpufile.sh
+
+
+cat /usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/test/__init__.py
+singularity exec -B _api:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api test.img cat /usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/test/__init__.py
+
+
+singularity exec -B _api:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/compat test.img python3 -c "import tensorflow"
+
+singularity shell -B _api:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/compat/v1/test test3.simg
+
+sudo singularity shell --writable test.img
+rm -Rf /usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/compat/v1/test
+mkdir /usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/compat/v1/test
+touch /usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/test/__init__.py
+
+singularity shell --writable test.img
+
+singularity exec test.img python3 -c "import tensorflow"
+
+singularity exec -B _api:/usr/local/lib/python3.5/dist-packages/tensorflow_core/_api/v1/compat/v1/test  test3.simg python3 -c "import tensorflow"
+
+singularity build test.simg Singularity
+
+sudo singularity build --writable ubuntu.img docker://ubuntu
+
+singularity build tf.simg docker://tensorflow/tensorflow:nightly-gpu-py3 
+singularity build cuda-10.1-cudnn7-devel-ubuntu18.04.simg docker://nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04 
+singularity shell cuda-10.1-cudnn7-devel-ubuntu18.04.simg
+
+singularity build cuda-10.1-cudnn7-devel-ubuntu16.04.simg docker://nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04 
+singularity shell cuda-10.1-cudnn7-devel-ubuntu16.04.simg
+docker run -it nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04 
+
+export gpu=`qstat -n $PBS_JOBID|awk ' END { split ($NF, a, "/"); printf ("gpu%s\n", a[2]) } '`
+export THEANO_FLAGS="device=${gpu}"
+Another way could be to limit CUDA to exactly that GPU:
+echo $CUDA_VISIBLE_DEVICES
+export CUDA_VISIBLE_DEVICES=`qstat -n $PBS_JOBID|awk 'END {split ($NF, a, "/"); printf ("%s\n", a[2])}'` 
+
+qsub -I -q gpu
+
+
+
+
+
+     during execution
+   - add LIBDIR to the `LD_RUN_PATH' en
+
+ qsub -q gpu -l nodes=compute-0-27:ppn=1,gpus=1,naccesspolicy=SHARED jobid.sh &
+ 
+ qsub -I -q gpu -l nodes=1:ppn=1,gpus=1 -d /
+ env | grep PBS
+ cat $PBS_NODEFILE
+ 
+compute-0-27
+titan X (pascal) 6.1
+compute-0-36
+tesla k20m 3.5
+compute-0-38
+tesla k20m 3.5
+ NVIDIA-SMI 410.79       Driver Version: 410.79       CUDA Version: 10.0
+q
+
+qsub -q gpu -l nodes=compute-0-38:ppn=2 -I
+qstat -f $PBS_JOBID | grep exec_host | sed "s/.*= *//" | sed "s/[[:alnum:]\-]*\///g" | sed "s/\+/,/"
+
+export CUDA_VISIBLE_DEVICES=`qstat -f $PBS_JOBID | grep exec_host | sed "s/.*= *//" | sed "s/[[:alnum:]\-]*\///g" | sed "s/\+/,/"`
+echo $CUDA_VISIBLE_DEVICES
+
+echo compute-0-36/0+compute-0-36/1 | sed -r "s/[\w\-]*\///"
+
+compute-0-38/0
+compute-0-36/0+compute-0-36/1

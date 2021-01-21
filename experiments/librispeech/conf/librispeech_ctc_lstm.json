@@ -1,0 +1,10 @@
+{
+  "model": "ctc",
+  "model_version": "lstm",
+  "subsample": 3,
+  "lr": 3e-4,
+  "l2": 1e-6,
+  "depth": 5,
+  "listener_dim": 320,
+  "clip_gradient_norm": 1
+}

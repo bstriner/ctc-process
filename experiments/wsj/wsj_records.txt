@@ -1,0 +1,402 @@
+
+# Create records
+
+wsj_records() {
+DATASET="$1"
+CMVN="$2"
+SENTENCEPIECE="$3"
+VOCABSIZE="$4"
+DSNAME="${DATASET}${CMVN}"
+SPFLAG="False"
+if [ $SENTENCEPIECE -eq 1 ]; then
+DSNAME="${DSNAME}-sentencepiece-${VOCABSIZE}"
+SPFLAG="True"
+fi
+JOB_NAME="records-${DSNAME}"
+echo ${JOB_NAME}
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=8G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir="/data/VOL3/bstriner/asr-vae/data/wsj/export-${DATASET}" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-${DSNAME}" \
+    --feats_file="feats${CMVN}.ark" \
+    --sentencepiece="${SPFLAG}" \
+    --vocab_size="${VOCABSIZE}" \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+}
+
+wsj_records fbank80-logpitch -cmvn-global 0 500
+
+wsj_records fbank80-logpitch -cmvn-global 1 500
+wsj_records fbank80-logpitch -cmvn-global 1 1000
+wsj_records fbank80-logpitch -cmvn-global 1 2000
+wsj_records fbank80-logpitch -cmvn-global 1 4000
+
+# Check space
+ stone-0-36 stone-0-27
+
+for NODE in stone-0-25 stone-0-38 ; do
+echo Node: ${NODE}
+srun --partition=gpu --nodelist=$NODE df -h
+done
+
+for NODE in  islpc30 islpc34 islpc38; do
+echo Node: ${NODE}
+srun --partition=2gpu --nodelist=$NODE df -h
+done
+
+for NODE in  islpc38 islpc39; do
+echo Node: ${NODE}
+srun --partition=2gpu --nodelist=$NODE df -h
+done
+
+
+# Check directory
+
+for NODE in stone-0-25 stone-0-38 ; do
+echo "Node: ${NODE}"
+srun --partition=gpu --nodelist="${NODE}" --mem=2G --gres=gpu:0 --cpus-per-task=1 ls /scratch/bstriner/wsj-data
+done
+
+for NODE in  islpc35 ; do
+echo "Node: ${NODE}"
+srun --partition=2gpu --nodelist="${NODE}" --mem=2G --gres=gpu:0 --cpus-per-task=1 ls /scratch/bstriner/wsj-data
+done
+
+for NODE in islpc34; do
+echo "Node: ${NODE}"
+srun --partition=2gpu --nodelist="${NODE}" --mem=2G --gres=gpu:0 --cpus-per-task=1 ls /scratch/bstriner/wsj-data
+done
+
+
+
+squeue -u bstriner -i 30
+
+# delete directory
+
+PARTITION=gpu
+
+for NODE in stone-0-25 stone-0-38 ; do
+sbatch --partition=gpu --nodelist="${NODE}" --mem=2G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+rm -Rf /scratch/bstriner/wsj-data
+EOF
+done
+
+for NODE in islpc30 islpc34 islpc38; do
+
+for NODE in islpc38 islpc39; do
+sbatch --partition=2gpu --nodelist="${NODE}" --mem=2G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+rm -Rf /scratch/bstriner/wsj-data
+EOF
+done
+
+NODE=islpc35
+sbatch --partition=2gpu --nodelist="${NODE}" --mem=2G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+rm -Rf /scratch/bstriner/wsj-data
+EOF
+
+# Copy data
+
+copy_wsj(){
+sbatch --partition=$1 --nodelist=$2 --mem=1G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+rm -Rf /scratch/bstriner/wsj-data/tfrecords-$3
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-$3 /scratch/bstriner/wsj-data
+EOF
+}
+
+for NODE in stone-0-27; do
+copy_wsj gpu "${NODE}" fbank80-logpitch-cmvn-global-sentencepiece-200
+done
+
+
+for NODE in stone-0-25 stone-0-27 stone-0-36 stone-0-38; do
+echo "Node: ${NODE}"
+srun --partition=gpu --nodelist=${NODE} df -h
+done
+
+for NODE in stone-0-25 stone-0-27 stone-0-36 stone-0-38; do
+copy_wsj gpu "${NODE}" fbank80-logpitch-cmvn-global-sentencepiece-200
+done
+
+
+
+
+copy_wsj gpu stone-0-27 fbank80-logpitch-cmvn-global
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global
+
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global
+copy_wsj gpu stone-0-27 fbank80-logpitch-cmvn-global
+
+
+copy_wsj 2gpu islpc37 fbank80-logpitch-cmvn-global
+copy_wsj 4gpu islpc50 fbank80-logpitch-cmvn-global
+
+
+copy_wsj 2gpu islpc33 fbank80-logpitch-cmvn-global
+copy_wsj 2gpu islpc34 fbank80-logpitch-cmvn-global
+
+copy_wsj 2gpu islpc38 fbank80-logpitch-cmvn-global
+copy_wsj 2gpu islpc39 fbank80-logpitch-cmvn-global
+
+copy_wsj gpu stone-0-25 fbank80-logpitch-cmvn-global
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global
+
+copy_wsj 2gpu islpc35 fbank80-logpitch-cmvn-global
+copy_wsj 2gpu islpc38 fbank80-logpitch-cmvn-global
+
+
+copy_wsj 4gpu islpc52 fbank80-logpitch-cmvn-global
+copy_wsj 4gpu islpc53 fbank80-logpitch-cmvn-global
+
+
+copy_wsj 2gpu islpc37 fbank80-logpitch-cmvn-global
+
+copy_wsj 2gpu islpc32 fbank80-logpitch-cmvn-global
+
+
+copy_wsj 2gpu islpc35 fbank80-logpitch-cmvn-global-sentencepiece-200
+copy_wsj 2gpu islpc35 fbank80-logpitch-cmvn-global-sentencepiece-1000
+
+
+copy_wsj 2gpu islpc31 fbank80-logpitch-cmvn-global-sentencepiece-200
+copy_wsj 2gpu islpc33 fbank80-logpitch-cmvn-global-sentencepiece-1000
+
+copy_wsj 2gpu islpc35 fbank80-logpitch-cmvn-global-sentencepiece-1000
+
+
+for NODE in islpc31 islpc33; do
+copy_wsj 2gpu ${NODE} fbank80-logpitch-cmvn-global-sentencepiece-200
+done
+
+
+
+for NODE in islpc30 islpc34 islpc38; do
+copy_wsj 2gpu ${NODE} fbank80-logpitch-cmvn-global-sentencepiece-200
+done
+
+
+copy_wsj 2gpu ${NODE} fbank80-logpitch-cmvn-global
+
+
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-200
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-200
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global
+
+
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-100
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-200
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-500
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-100
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-200
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-500
+
+
+copy_wsj gpu stone-0-25 fbank80-logpitch-cmvn-global-sentencepiece-100
+copy_wsj gpu stone-0-25 fbank80-logpitch-cmvn-global-sentencepiece-200
+
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-200
+
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-50
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-100
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-150
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-200
+
+
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-500
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-1000
+copy_wsj gpu stone-0-38 fbank80-logpitch-cmvn-global-sentencepiece-2000
+
+copy_wsj gpu stone-0-36 fbank80-logpitch-cmvn-global-sentencepiece-4000
+
+
+for NODE in stone-0-25 stone-0-36 stone-0-38 stone-0-27; do
+echo Node: ${NODE}
+srun --partition=gpu --nodelist=$NODE df -h
+done
+
+
+for NODE in stone-0-25 stone-0-36 stone-0-38; do
+echo Node: ${NODE}
+srun --partition=gpu --nodelist=$NODE ls /scratch/bstriner/wsj-data
+done
+
+
+
+PARTITION=2gpu
+for NODE in stone-0-25 stone-0-36 stone-0-38 stone-0-27; do
+for DATASET in \
+    fbank80-cmvn-global
+    fbank80-cmvn-global-sentencepiece-500 \
+    fbank80-cmvn-global-sentencepiece-1000 \
+    fbank80-cmvn-global-sentencepiece-2000 \
+    fbank80-cmvn-global-sentencepiece-4000; do
+copy_wsj ${PARTITION} ${NODE} ${DATASET}
+sbatch --partition=gpu --nodelist=stone-0-27 --mem=1G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+rm -Rf /scratch/bstriner/wsj-data/${DATASET}
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/${DATASET} /scratch/bstriner/wsj-data
+EOF
+
+
+
+
+
+
+
+
+
+
+DATASET=fbank80-logpitch
+CMVN=-cmvn-global
+SENTENCEPIECE=1
+VOCABSIZE=4000
+DSNAME="${DATASET}${CMVN}"
+SPFLAG=False
+if [ $SENTENCEPIECE -eq 1 ]; then
+DSNAME="${DSNAME}-sentencepiece-${VOCABSIZE}"
+SPFLAG=True
+fi
+JOB_NAME="records-${DSNAME}"
+echo ${JOB_NAME}
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=8G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir="/data/VOL3/bstriner/asr-vae/data/wsj/export-${DATASET}" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-${DSNAME}" \
+    --feats_file=feats${CMVN}.ark \
+    --sentencepiece=${SPFLAG} \
+    --vocab_size=${VOCABSIZE} \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+
+
+
+JOB_NAME="records-cmvn-speaker"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=4G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=-1
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir=/data/VOL3/bstriner/asr-vae/data/wsj/export-fbank80 \
+    --data_dir=/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-speaker \
+    --feats_file=feats-cmvn-speaker.ark \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+
+JOB_NAME="records-cmvn-global"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=4G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=-1
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir=/data/VOL3/bstriner/asr-vae/data/wsj/export-fbank80 \
+    --data_dir=/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global \
+    --feats_file=feats-cmvn-global.ark \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+
+
+JOB_NAME="records-logpitch"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=4G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=-1
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir=/data/VOL3/bstriner/asr-vae/data/wsj/export-fbank80-logpitch \
+    --data_dir=/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-logpitch \
+    --feats_file=feats.ark \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+
+JOB_NAME="records-cmvn-speaker"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=4G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=-1
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir=/data/VOL3/bstriner/asr-vae/data/wsj/export-fbank80-logpitch \
+    --data_dir=/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-speaker-logpitch \
+    --feats_file=feats-cmvn-speaker.ark \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+
+JOB_NAME="records-cmvn-global"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=4G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=-1
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir=/data/VOL3/bstriner/asr-vae/data/wsj/export-fbank80-logpitch \
+    --data_dir=/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global-logpitch \
+    --feats_file=feats-cmvn-global.ark \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF

@@ -1,0 +1,147 @@
+squeue -o "%.18i %.9P %.38j %.8u %.8T %.10M %.9l %.6D %R" -i 30
+
+/data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_sbatch_tensorboard.sh
+
+
+srun --partition=gpu --nodelist=stone-0-38 --pty bash
+mkdir -p /tmp/asr-vae-data/librispeech
+rm -Rf /tmp/asr-vae-data/librispeech/tfrecords
+cp -Rf /data/VOL3/bstriner/asr-vae/data/librispeech/tfrecords /tmp/asr-vae-data/librispeech
+
+sbatch --time=24:00:00 \
+    --partition=cpu \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_tensorboard.sh
+ssh -N -L 6006:stone-0-29:6006 bstriner@stoned.is.cs.cmu.edu
+
+
+JOB_NAME="librispeech-ctc-vae-constlen-new-1"
+/data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/librispeech_ctc_vae_constlen.json" \
+    --model_dir="../../output/librispeech/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=128,decoder_depth=3,encoder_dim=128,encoder_depth=3,lr=3e-4,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-1,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/train_clean_360" \
+    --eval_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/dev_clean"
+
+
+JOB_NAME="librispeech-ctc-vae-constlen-new-2"
+/data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/librispeech_ctc_vae_constlen.json" \
+    --model_dir="../../output/librispeech/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=128,decoder_depth=3,encoder_dim=128,encoder_depth=3,lr=3e-4,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-2,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/train_clean_360" \
+    --eval_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/dev_clean"
+
+JOB_NAME="librispeech-ctc-vae-constlen-new-256-6"
+/data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/librispeech_ctc_vae_constlen.json" \
+    --model_dir="../../output/librispeech/ctc-vae-constlen/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,encoder_dim=128,encoder_depth=3,lr=3e-4,latent_dim=64,anneal_start=20000,anneal_end=40000,anneal_min=1e-2,anneal_max=1.0" \
+    --train_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/train_clean_360" \
+    --eval_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/dev_clean"
+
+DIM=256
+DEPTH=6
+LR=3e-4
+JOB_NAME="librispeech-dim-${DIM}-depth-${DEPTH}-lr-${LR}"
+/data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/librispeech_ctc.json" \
+    --model_dir="../../output/librispeech/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=20000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR}" \
+    --train_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/train_clean_360" \
+    --eval_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/dev_clean"
+
+DIM=256
+DEPTH=6
+LR=3e-4
+JOB_NAME="librispeech-dim-${DIM}-depth-${DEPTH}-lr-${LR}"
+nohup python3.7 librispeech_train.py --config="conf/librispeech_ctc.json" \
+    --model_dir="../../output/librispeech/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=20000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=${DIM},decoder_depth=${DEPTH},lr=${LR}" \
+     & disown
+
+
+JOB_NAME="librispeech-mm-v1"
+/data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/librispeech_ctc_mm.json" \
+    --model_dir="../../output/librispeech/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=20000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=128,decoder_depth=3,lr=3e-4,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/train_clean_360" \
+    --eval_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/dev_clean"
+
+JOB_NAME="librispeech-mm-256-6"
+/data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/librispeech_ctc_mm.json" \
+    --model_dir="../../output/librispeech/ctc/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=500000 \
+    --max_steps_without_decrease=20000 \
+    --hparams="clip_gradient_value=0.1,clip_gradient_norm=0.0,decoder_dim=256,decoder_depth=6,lr=3e-4,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/train_clean_360" \
+    --eval_data_dir="/tmp/asr-vae-data/librispeech/tfrecords/dev_clean"
+
+
+
+JOB_NAME="ctc-mm-v8"
+/data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_sbatch.sh \
+    "${JOB_NAME}" \
+    /data/VOL3/bstriner/asr-vae/logs/${JOB_NAME}.txt \
+    --config="conf/wsj_ctc_mm.json" \
+    --model_dir="../../output/wsj/ctc-ae/${JOB_NAME}" \
+    --train_batch_size=4 \
+    --eval_batch_size=4 \
+    --save_summary_steps=200  \
+    --save_checkpoints_steps=2000 \
+    --max_steps=200000 \
+    --hparams="clip_gradient_value=0.01,clip_gradient_norm=0.0,decoder_dim=320,decoder_depth=5,lr=0.00003,mm_size=4" \
+    --train_data_dir="/tmp/asr-vae-data/wsj/tfrecords/train_si284" \
+    --eval_data_dir="/tmp/asr-vae-data/wsj/tfrecords/test_dev93"

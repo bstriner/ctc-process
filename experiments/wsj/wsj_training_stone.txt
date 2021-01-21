@@ -1,0 +1,376 @@
+
+squeue -u bstriner -o "%i %R %j"
+
+copy_singularity_simg(){
+sbatch --partition=$1 --nodelist=$2 --mem=1G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/
+rm /scratch/bstriner/10.0-1.14.0.simg
+cp /data/VOL3/bstriner/singularity/images/10.0-1.14.0.simg /scratch/bstriner
+EOF
+}
+
+for NODE in stone-0-27; do
+copy_singularity_simg gpu "${NODE}"
+done
+
+copy_singularity_simg gpu stone-0-36
+
+copy_singularity_simg gpu stone-0-25
+
+
+copy_singularity_simg gpu stone-0-36
+copy_singularity_simg gpu stone-0-38
+
+
+# Stone training
+
+DATASET="fbank80-cmvn-global-logpitch"
+DATASET="mel-40-cmvn-speaker"
+DATASET="mel-80-cmvn-speaker"
+-sentencepiece-50
+# Stone training sentencepiece
+
+
+
+NODE=stone-0-27
+DATASET="fbank80-logpitch-cmvn-global-sentencepiece-200"
+MODEL="ctc"
+MM=4
+DIM=500
+DEPTH=5
+EDIM=320
+EDEPTH=3
+OPT=adamw
+LR=1e-3
+L2=1e-6
+CLIP=0.1
+VARIATIONAL="none"
+SIGMA_INIT="0.01"
+NORM="none"
+SUBSAMPLE=3
+AUG=False
+WARP=80
+RNN=cudnn_lstm
+SPONLINE=False
+PREPROC="none"
+POSTPROC="none"
+flat_latent=True
+DO=0
+UO=False
+JOB_NAME="wsj-${MODEL}-${DATASET}-${RNN}-${DIM}-${DEPTH}-${OPT}-${LR}-${L2}-clipping-${CLIP}-sub-${SUBSAMPLE}"
+if [ "${AUG}" == "True" ]; then JOB_NAME="${JOB_NAME}-aug-${WARP}"; fi
+if [ "${SPONLINE}" == "True" ]; then JOB_NAME="${JOB_NAME}-sponline"; fi
+if [ "${NORM}" != "none" ]; then JOB_NAME="${JOB_NAME}-${NORM}"; fi
+if [ "${VARIATIONAL}" != "none" ]; then JOB_NAME="${JOB_NAME}-variational-${VARIATIONAL}-${SIGMA_INIT}"; fi
+if [ "${PREPROC}" != "none" ]; then JOB_NAME="${JOB_NAME}-${PREPROC}"; fi
+if [ "${POSTPROC}" != "none" ]; then JOB_NAME="${JOB_NAME}-${POSTPROC}"; fi
+if [ "${MODEL}" == "ctc-mm" ]; then JOB_NAME="${JOB_NAME}-mm-${MM}"; fi
+if [ "${DO}" != "0" ]; then
+if [ "${UO}" == "True" ]; then
+JOB_NAME="${JOB_NAME}-uo-${DO}"
+else
+JOB_NAME="${JOB_NAME}-do-${DO}"
+fi
+fi
+
+if [[ "${MODEL}" =~ ^(vae|aae|aae-stoch|ae)$ ]]; then
+JOB_NAME="${JOB_NAME}-encoder-${EDIM}-${EDEPTH}"
+if [ "${flat_latent}" == "True" ]; then
+JOB_NAME="${JOB_NAME}-flatlatent"
+else
+JOB_NAME="${JOB_NAME}-varlatent"
+fi
+fi
+
+echo "${JOB_NAME}"
+
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --nodelist=${NODE} \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec --nv \
+    /scratch/bstriner/10.0-1.14.0.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/wsj-latest/${JOB_NAME}.txt" \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj-latest/${JOB_NAME}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --hparams="flat_latent=${flat_latent},decoder_dropout=${DO},decoder_uout=${UO},l2=${L2},preproc_network=${PREPROC},sentencepiece_online=${SPONLINE},rnn_mode=${RNN},lr_scale=False,lr_rate=1.0,lr_min=1e-7,epochs_without_improvement=100,specaugment=${AUG},specaugment_W=${WARP},constlen_lstm=True,decoder_pyramid_depth=0,subsample=${SUBSAMPLE},independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,encoder_dim=${EDIM},encoder_depth=${EDEPTH},decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    --allow_growth="False"
+EOF
+
+
+# Stone training AUG
+
+DATASET="fbank80-cmvn-global-logpitch"
+VARIATIONAL="none"
+SIGMA_INIT="0.01"
+DIM=500
+DEPTH=5
+NORM="none"
+CONSTLEN=True
+SUBSAMPLE=3
+LR=3e-4
+CLIP=0.1
+OPT=adam
+WARP=80
+JOB_NAME="wsj-gru2-${DIM}-${DEPTH}-${DATASET}-${NORM}-variational-${VARIATIONAL}-init-${SIGMA_INIT}-${OPT}-${LR}-clipping-${CLIP}-sparse-sub-${SUBSAMPLE}-constlen-${CONSTLEN}-aug-${WARP}"
+echo "${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --nodelist=stone-0-36 \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec --nv \
+    /data/VOL3/bstriner/singularity/images/10.0-tf-nightly.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/aug/${JOB_NAME}.txt" \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj/ctc/aug/${DATASET}/${JOB_NAME}" \
+    --train_batch_size=8 \
+    --eval_batch_size=8 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --hparams="gru=True,lr_scale=True,lr_rate=0.5,lr_min=1e-7,epochs_without_improvement=2,specaugment=True,specaugment_W=${WARP},constlen_lstm=${CONSTLEN},decoder_pyramid_depth=0,subsample=3,independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},decoder_dropout=0.0,decoder_uout=True,optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    --allow_growth="False"
+EOF
+
+
+# STone resume
+
+DATASET="fbank80-logpitch-cmvn-global-sentencepiece-200"
+JOB_NAME="wsj-ctc-fbank80-logpitch-cmvn-global-sentencepiece-200-cudnn_lstm-500-5-adamw-3e-4-1e-6-clipping-0.1-sub-3"
+MODEL_DIR="../../output/wsj-latest/${JOB_NAME}"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --nodelist=stone-0-27 \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec --nv \
+    /scratch/bstriner/10.0-1.14.0.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/wsj-latest/${JOB_NAME}.txt" \
+    --config="${MODEL_DIR}/configuration-hparams.json" \
+    --model_dir="${MODEL_DIR}" \
+    --train_batch_size=16 \
+    --eval_batch_size=16 \
+    --save_summary_steps=100 \
+    --save_summary_steps_slow=400 \
+    --save_checkpoints_steps=2000 \
+    --max_steps=1000000 \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    --allow_growth="False"
+EOF
+
+
+srun --partition=4gpu --nodelist=islpc50 df -h
+
+srun --partition=2gpu --nodelist=islpc31 df -h
+srun --partition=2gpu --nodelist=islpc34 df -h
+srun --partition=2gpu --nodelist=islpc35 df -h
+srun --partition=2gpu --nodelist=islpc39 df -h
+
+srun --partition=2gpu --nodelist=islpc30 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc31 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc34 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc35 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc39 ls /scratch/bstriner/wsj-data
+
+srun --partition=2gpu --nodelist=islpc37 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc38 ls /scratch/bstriner/wsj-data
+
+srun --partition=2gpu --nodelist=islpc38 ls /scratch/bstriner/wsj-data
+srun --partition=2gpu --nodelist=islpc35 ls /scratch/bstriner/wsj-data
+
+srun --partition=4gpu --nodelist=islpc50 ls /scratch/bstriner/wsj-data
+srun --partition=4gpu --nodelist=islpc51 ls /scratch/bstriner/wsj-data
+
+31
+fbank80-cmvn-speaker-logpitch
+fbank80-cmvn-global
+
+34
+fbank80-cmvn-speaker
+fbank80-logpitch
+
+39
+fbank80
+fbank80-cmvn-global-logpitch
+
+sbatch --partition=2gpu --nodelist=islpc35 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=2gpu --nodelist=islpc30 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global-logpitch /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-38 --gres=gpu:1 --mem=30G <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-speaker-logpitch /scratch/bstriner/wsj-data
+EOF
+
+
+srun --partition=gpu --nodelist=stone-0-25 df -h
+srun --partition=gpu --nodelist=stone-0-36 df -h
+srun --partition=gpu --nodelist=stone-0-38 df -h
+srun --partition=gpu --nodelist=stone-0-27 df -h
+
+srun --partition=gpu --nodelist=stone-0-25 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-27 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-35 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-36 ls /scratch/bstriner/wsj-data
+srun --partition=gpu --nodelist=stone-0-38 ls /scratch/bstriner/wsj-data
+
+for NODE in islpc36
+do
+echo ${NODE}
+srun --partition=2gpu --nodelist=${NODE} ls /scratch/bstriner/wsj-data 2>/dev/null
+done
+
+sbatch --partition=2gpu --nodelist=islpc36 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global-logpitch /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-27 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global-logpitch /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-27 --mem=1G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-40-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+
+sbatch --partition=gpu --nodelist=stone-0-25 --mem=1G --gres=gpu:1 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-40-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+sbatch --partition=gpu --nodelist=stone-0-38 --mem=1G --gres=gpu:0 --cpus-per-task=1 <<EOF
+#!/bin/sh
+mkdir -p /scratch/bstriner/wsj-data
+cp -Rf /data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-80-cmvn-speaker /scratch/bstriner/wsj-data
+EOF
+
+
+
+srun --partition=2gpu --nodelist=islpc30 du -sh
+
+
+srun --partition=cpu --pty bash
+singularity shell /data/VOL3/bstriner/singularity/images/tf-nightly-cpu.simg
+
+
+sbatch \
+    --job-name="wsj_records" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec \
+    /data/VOL3/bstriner/singularity/images/tf-nightly-cpu.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel40-cmvn-global.txt" \
+    --input_dir="/data/VOL3/bstriner/data/wsj/export" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel40-cmvn-global" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark"
+EOF
+
+sbatch \
+    --job-name="wsj_records" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir="/data/VOL3/bstriner/data/wsj/export" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel40-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel40-cmvn-speaker.txt" \
+     2>&1
+EOF
+
+
+sbatch \
+    --job-name="librispeech_records" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/librispeech/librispeech_records.py \
+    --input_dir="/data/VOL3/bstriner/data/librispeech/export" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/librispeech/tfrecords-mel40-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel40-cmvn-speaker.txt" \
+     2>&1
+EOF
+

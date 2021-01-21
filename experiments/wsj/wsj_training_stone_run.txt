@@ -1,0 +1,86 @@
+
+NODE=stone-0-27
+DATASET="fbank80-logpitch-cmvn-global-sentencepiece-200"
+MODEL="ctc-mm"
+MM=8
+DIM=500
+DEPTH=5
+EDIM=320
+EDEPTH=3
+OPT=adamw
+LR=1e-3
+L2=1e-6
+CLIP=0.1
+VARIATIONAL="none"
+SIGMA_INIT="0.01"
+NORM="none"
+SUBSAMPLE=3
+AUG=False
+WARP=80
+RNN=cudnn_lstm
+SPONLINE=False
+PREPROC="none"
+POSTPROC="none"
+flat_latent=False
+DO=0
+UO=False
+train_batch_size=16
+train_acc=16
+
+JOB_NAME="wsj-${train_batch_size}-${train_acc}-${MODEL}-${DATASET}-${RNN}-${DIM}-${DEPTH}-${OPT}-${LR}-${L2}-clipping-${CLIP}-sub-${SUBSAMPLE}"
+if [ "${AUG}" == "True" ]; then JOB_NAME="${JOB_NAME}-aug-${WARP}"; fi
+if [ "${SPONLINE}" == "True" ]; then JOB_NAME="${JOB_NAME}-sponline"; fi
+if [ "${NORM}" != "none" ]; then JOB_NAME="${JOB_NAME}-${NORM}"; fi
+if [ "${VARIATIONAL}" != "none" ]; then JOB_NAME="${JOB_NAME}-variational-${VARIATIONAL}-${SIGMA_INIT}"; fi
+if [ "${PREPROC}" != "none" ]; then JOB_NAME="${JOB_NAME}-${PREPROC}"; fi
+if [ "${POSTPROC}" != "none" ]; then JOB_NAME="${JOB_NAME}-${POSTPROC}"; fi
+if [ "${MODEL}" == "ctc-mm" ]; then JOB_NAME="${JOB_NAME}-mm-${MM}"; fi
+if [ "${DO}" != "0" ]; then
+if [ "${UO}" == "True" ]; then
+JOB_NAME="${JOB_NAME}-uo-${DO}"
+else
+JOB_NAME="${JOB_NAME}-do-${DO}"
+fi
+fi
+
+if [[ "${MODEL}" =~ ^(vae|aae|aae-stoch|ae)$ ]]; then
+JOB_NAME="${JOB_NAME}-encoder-${EDIM}-${EDEPTH}"
+if [ "${flat_latent}" == "True" ]; then
+JOB_NAME="${JOB_NAME}-flatlatent"
+else
+JOB_NAME="${JOB_NAME}-varlatent"
+fi
+fi
+
+echo "${JOB_NAME}"
+
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=gpu \
+    --nodelist=${NODE} \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --gres=gpu:1 \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec --nv \
+    /scratch/bstriner/10.0-1.14.0.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_train.sh \
+    "/data/VOL3/bstriner/asr-vae/logs/wsj-latest-1e3-acc/${JOB_NAME}.txt" \
+    --config="conf/wsj_ctc.json" \
+    --model_dir="../../output/wsj-latest-1e3-acc/${JOB_NAME}" \
+    --train_batch_size=${train_batch_size} \
+    --eval_batch_size=${train_batch_size} \
+    --save_summary_steps=200 \
+    --save_summary_steps_slow=800 \
+    --hparams="model=${MODEL},train_acc=${train_acc},flat_latent=${flat_latent},decoder_dropout=${DO},decoder_uout=${UO},l2=${L2},preproc_network=${PREPROC},sentencepiece_online=${SPONLINE},rnn_mode=${RNN},lr_scale=False,lr_rate=1.0,lr_min=1e-7,epochs_without_improvement=200,specaugment=${AUG},specaugment_W=${WARP},constlen_lstm=True,decoder_pyramid_depth=0,subsample=${SUBSAMPLE},independent_subsample=True,clip_gradient_norm=0.0,clip_gradient_value=${CLIP},residual=False,encoder_dim=${EDIM},encoder_depth=${EDEPTH},decoder_dim=${DIM},decoder_depth=${DEPTH},batch_norm=${NORM},optimizer=${OPT},lr=${LR},variational_mode=${VARIATIONAL},variational_sigma_init=${SIGMA_INIT},variational_sigma_prior=1.0,variational_scale=0.00002673796" \
+    --train_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/train_si284" \
+    --eval_data_dir="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/test_dev93" \
+    --vocab_file="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/vocab.npy" \
+    --data_config="/scratch/bstriner/wsj-data/tfrecords-${DATASET}/data_config.json" \
+    --ctc_mode="sparse" \
+    --allow_growth="False"
+EOF
+

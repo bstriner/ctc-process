@@ -1,0 +1,519 @@
+kaldi
+
+sbatch <<EOS
+#!/bin/sh
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-gpu-latest.simg docker://kaldiasr/kaldi:gpu-latest
+EOS
+
+sbatch <<EOS
+#!/bin/sh
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-latest.simg docker://kaldiasr/kaldi:latest
+EOS
+
+
+sbatch <<EOS
+#!/bin/sh
+singularity cache clean -a
+singularity build /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg docker://bstriner/kaldi:cpu \
+> /data/VOL3/bstriner/singularity/images/kaldi-cpu.log 2>&1
+EOS
+
+
+
+#Kaldi processing
+
+
+srun --partition=cpu --time=48:00:00 --mem=30G  --pty bash
+singularity shell -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg.bak2
+
+export train_cmd="run.pl --mem 2G"
+export decode_cmd="run.pl --mem 4G"
+export mkgraph_cmd="run.pl --mem 8G"
+export KALDI_ROOT=/opt/kaldi
+export S5=/opt/kaldi/egs/wsj/s5
+export PATH=$S5/utils/:$KALDI_ROOT/tools/openfst/bin:$S5:$PATH
+source $KALDI_ROOT/tools/config/common_path.sh
+source $KALDI_ROOT/tools/env.sh
+export LC_ALL=C
+PYTHON='python2.7'
+
+cd ${S5}
+
+DATADIR=/data/VOL3/bstriner/data/wsj
+rm -Rf ${DATADIR}
+
+
+
+wsj0=/data/MM1/corpora/LDC93S6B
+wsj1=/data/MM1/corpora/LDC94S13B
+ls $wsj0
+ls $wsj1
+
+local/wsj_data_prep.sh $wsj0/??-{?,??}.? $wsj1/??-{?,??}.?
+
+
+DATADIR=/opt/kaldi/egs/wsj/s5/data
+EXPORTDIR=/data/VOL3/bstriner/data/wsj/export
+for part in test_eval92 test_eval93 test_dev93 train_si284; do
+PARTDIR=${DATADIR}/${part}
+EXPORTPARTDIR=${EXPORTDIR}/${part}
+WAV=${PARTDIR}/wav.scp
+MFCC=${PARTDIR}/feats-mfcc.ark
+PITCH=${PARTDIR}/feats-pitch.ark
+MFCCPITCH=${PARTDIR}/feats-mfcc-pitch.ark
+MFCCPITCHSCP=${PARTDIR}/feats-mfcc-pitch.scp
+CMVN=${PARTDIR}/cmvn.ark
+FEATSCMVN=${PARTDIR}/feats-cmvn.ark
+SPK2UTT=${PARTDIR}/spk2utt
+UTT2SPK=${PARTDIR}/utt2spk
+TEXT=${PARTDIR}/text
+compute-mfcc-feats --sample-frequency=16000 --use-energy=false --num-mel-bins=40 --num-ceps=40 --low-freq=20 --high-freq=-400 scp:${WAV} ark:${MFCC}
+compute-kaldi-pitch-feats --sample-frequency=16000 scp:${WAV} ark:- |  process-kaldi-pitch-feats --add-raw-log-pitch=true ark:- ark:${PITCH}
+paste-feats --length-tolerance=2 \
+  "ark:${MFCC}" \
+  "ark:${PITCH}" \
+  ark:- | \
+  copy-feats ark:- \
+  ark:${MFCCPITCH}
+compute-cmvn-stats --spk2utt=ark:${SPK2UTT} ark:${MFCCPITCH} ark:${CMVN}
+apply-cmvn --utt2spk=ark:${UTT2SPK} ark:${CMVN} ark:${MFCCPITCH} ark:${FEATSCMVN}
+mkdir -p ${EXPORTPARTDIR}
+cp ${FEATSCMVN} ${EXPORTPARTDIR}
+cp ${TEXT} ${EXPORTPARTDIR}
+cp ${UTT2SPK} ${EXPORTPARTDIR}
+done
+
+
+DATADIR=/opt/kaldi/egs/wsj/s5/data
+EXPORTDIR=/data/VOL3/bstriner/data/wsj/export
+for part in test_eval92 test_eval93 test_dev93 train_si284; do
+PARTDIR=${DATADIR}/${part}
+EXPORTPARTDIR=${EXPORTDIR}/${part}
+FEATSCMVN=${PARTDIR}/feats-cmvn.ark
+UTT2SPK=${PARTDIR}/utt2spk
+TEXT=${PARTDIR}/text
+mkdir -p ${EXPORTPARTDIR}
+cp ${FEATSCMVN} ${EXPORTPARTDIR}
+cp ${TEXT} ${EXPORTPARTDIR}
+cp ${UTT2SPK} ${EXPORTPARTDIR}
+done
+
+source cmd.sh
+source path.sh
+
+x=test_eval92
+apply-cmvn --norm-means --norm-vars \
+    --utt2spk=ark:data/$x/utt2spk \
+    scp:data/$x/cmvn.scp scp:data/$x/feats.scp \
+    ark,t:textdata/$x/feats-normalized.ark
+
+
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+    mkdir -p export/$x || exit 1;
+    steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 10  \
+        data/${x} exp/make_fbank_pitch/${x} data/${x}/fbank || exit 1;
+    utils/fix_data_dir.sh data/${x} || exit 1;
+    compute-cmvn-stats --spk2utt=ark:data/${x}/spk2utt scp:data/${x}/feats.scp ark:data/${x}/cmvn.ark || exit 1;
+    steps/compute_cmvn_stats.sh \
+        data/${x} exp/compute_cmvn_stats/${x} data/${x}/cmvn || exit 1;
+    apply-cmvn --norm-means=true --norm-vars=true \
+        --utt2spk=ark:data/${x}/utt2spk \
+        ark:data/${x}/cmvn.ark scp:data/${x}/feats.scp \
+        ark:export/$x/feats-cmvn-speaker.ark || exit 1;
+    copy-matrix scp:data/$x/feats.scp ark:export/$x/feats.ark || exit 1;
+    cp data/$x/utt2spk export/$x || exit 1;
+    cp data/$x/text export/$x || exit 1;
+done
+
+compute-cmvn-stats scp:data/train_si284/feats.scp data/train_si284/cmvn-global.ark || exit 1;
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+    apply-cmvn --norm-means=true --norm-vars=true \
+        data/train_si284/cmvn-global.ark scp:data/${x}/feats.scp \
+        ark:export/$x/feats-cmvn-global.ark || exit 1;
+done
+
+
+x=test_eval92
+
+rm wsj-run.out
+nohup wsj-run.sh > wsj-run.out & disown
+tail -f wsj-run.out
+
+export CUDA_VISIBLE_DEVICES=-1
+nohup python3.7 wsj_records.py \
+    --input_dir=/mnt/data/projects/kaldi/egs/wsj/s5/export-fbank80 \
+    --data_dir=/mnt/data/projects/asr-vae/data/wsj/tfrecords-fbank80 \
+    --feats_file=feats.ark > records-1.out & disown
+nohup python3.7 wsj_records.py \
+    --input_dir=/mnt/data/projects/kaldi/egs/wsj/s5/export-fbank80 \
+    --data_dir=/mnt/data/projects/asr-vae/data/wsj/tfrecords-fbank80-cmvn-speaker \
+    --feats_file=feats-cmvn-speaker.ark > records-2.out & disown
+nohup python3.7 wsj_records.py \
+    --input_dir=/mnt/data/projects/kaldi/egs/wsj/s5/export-fbank80 \
+    --data_dir=/mnt/data/projects/asr-vae/data/wsj/tfrecords-fbank80-cmvn-global \
+    --feats_file=feats-cmvn-global.ark > records-3.out & disown
+nohup python3.7 wsj_records.py \
+    --input_dir=/mnt/data/projects/kaldi/egs/wsj/s5/export-fbank80-logpitch \
+    --data_dir=/mnt/data/projects/asr-vae/data/wsj/tfrecords-fbank80-logpitch \
+    --feats_file=feats.ark > records-4.out & disown
+nohup python3.7 wsj_records.py \
+    --input_dir=/mnt/data/projects/kaldi/egs/wsj/s5/export-fbank80-logpitch \
+    --data_dir=/mnt/data/projects/asr-vae/data/wsj/tfrecords-fbank80-logpitch-cmvn-speaker \
+    --feats_file=feats-cmvn-speaker.ark > records-5.out & disown
+nohup python3.7 wsj_records.py \
+    --input_dir=/mnt/data/projects/kaldi/egs/wsj/s5/export-fbank80-logpitch \
+    --data_dir=/mnt/data/projects/asr-vae/data/wsj/tfrecords-fbank80-logpitch-cmvn-global \
+    --feats_file=feats-cmvn-global.ark > records-6.out & disown
+
+
+srun --partition=cpu --pty bash
+source /data/VOL3/bstriner/pyvenv/bin/activate
+pip install tqdm
+
+
+JOB_NAME="records-1"
+sbatch \
+    --job-name="$JOB_NAME" \
+    --partition=cpu \
+    --mem=4G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=-1
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir=/data/VOL3/bstriner/asr-vae/data/wsj/export-fbank80 \
+    --data_dir=/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80 \
+    --feats_file=feats.ark \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+
+
+
+nohup scp export-fbank80.tgz bstriner@stoned.is.cs.cmu.edu:/data/VOL3/bstriner/asr-vae/data > scp1.out & disown
+nohup scp export-fbank80-logpitch.tgz bstriner@stoned.is.cs.cmu.edu:/data/VOL3/bstriner/asr-vae/data > scp2.out & disown
+
+nohup md5sum export-fbank80.tgz > export-fbank80.md5 & disown
+nohup md5sum export-fbank80-logpitch.tgz > export-fbank80-logpitch.md5 & disown
+
+nohup tar xzf export-fbank80.tgz > tar1.out & disown
+nohup tar xzf export-fbank80-logpitch.tgz > tar2.out & disown
+
+ben@unity:/mnt/data/projects/kaldi/egs/wsj/s5$ cat export-fbank80.md5
+59b96e89c59ebb6bf0d9dac36e85e511  export-fbank80.tgz
+ben@unity:/mnt/data/projects/kaldi/egs/wsj/s5$ cat export-fbank80-logpitch.md5
+5312422e611537801bc3083f83b201e5  export-fbank80-logpitch.tgz
+
+
+nk80-logpitch      rnnlm     tdback
+conf     export-fbank80-logpitch.tgz  run.sh    textdata
+data               steps     utils
+exp      local
+
+
+feats-cmvn-speaker.ark
+feats-cmvn-global.ark
+
+compute-cmvn-stats scp:data/train_si284/feats.scp data/train_si284/cmvn-global.ark
+apply-cmvn --norm-means=true --norm-vars=true \
+        data/train_si284/cmvn-global.ark scp:data/${x}/feats.scp \
+        ark:export/$x/feats-cmvn-global.ark
+
+# Global CMVN
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+    steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 10  \
+        data/${x} exp/make_fbank_pitch/${x} data/${x}/fbank || exit 1;
+    utils/fix_data_dir.sh data/${x} || exit 1;
+done
+
+
+compute-cmvn-stats scp:data/train_si284/feats.scp data/train_si284/cmvn-global.ark || exit 1;
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+    mkdir -p export-cmvn-global/$x || exit 1;
+    apply-cmvn --norm-means=true --norm-vars=true \
+        data/train_si284/cmvn-global.ark scp:data/${x}/feats.scp \
+        ark:export-cmvn-global/$x/feats-normalized.ark || exit 1;
+    copy-matrix scp:data/$x/feats.scp ark:export-cmvn-global/$x/feats.ark || exit 1;
+    cp data/$x/utt2spk export-cmvn-global/$x || exit 1;
+    cp data/$x/text export-cmvn-global/$x || exit 1;
+done
+
+
+pitch_postprocess_config
+
+
+
+rm wsj-run.out
+nohup wsj-run.sh > wsj-run.out & disown
+tail -f wsj-run.out
+
+
+
+copy-matrix scp:data/$x/feats.scp ark,t:textdata/$x/feats.ark || exit 1;
+copy-matrix scp:data/$x/cmvn.scp ark,t:textdata/$x/cmvn.ark || exit 1;
+copy-matrix scp:data/$x/cmvn.scp ark:export/$x/cmvn.ark || exit 1;
+cp data/$x/spk2gender textdata/$x || exit 1;
+cp data/$x/utt2num_frames textdata/$x || exit 1;
+
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+ steps/make_mfcc_pitch.sh \
+--mfcc-config conf/mfcc_hires.conf \
+--pitch-config conf/pitch.conf \
+--pitch_postprocess_config conf/pitch_process.conf \
+--paste_length_tolerance 30 \
+--cmd "$train_cmd" --nj 20 \
+data/$x data/$x/mfcc_pitch_log data/$x/mfcc_pitch_data || exit 1;
+steps/compute_cmvn_stats.sh \
+data/$x data/$x/cmvn_log data/$x/cmvn_data|| exit 1;
+mkdir -p textdata/$x|| exit 1;
+copy-matrix scp:data/$x/feats.scp ark,t:textdata/$x/text-feats.ark || exit 1;
+copy-matrix scp:data/$x/cmvn.scp ark,t:textdata/$x/text-cmvn.ark || exit 1;
+copy-matrix scp:data/$x/wav.scp ark,t:textdata/$x/text-wav.ark || exit 1;
+cp data/$x/utt2num_frames textdata/$x || exit 1;
+cp data/$x/utt2spk textdata/$x || exit 1;
+cp data/$x/spk2gender textdata/$x || exit 1;
+cp data/$x/text textdata/$x || exit 1;
+done
+
+nohup ./run.sh > wsj-run.out & disown
+
+
+copy-matrix --verbose scp:data/$x/wav.scp ark,t:textdata/$x/text-wav.ark
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+copy-matrix scp:data/$x/wav.scp ark,t:textdata/$x/text-wav.ark
+done
+
+ || exit 1;
+./cmd.sh
+./path.sh
+train_cmd=run.pl
+x=test_eval92
+steps/make_mfcc_pitch.sh \
+--mfcc-config conf/mfcc_hires.conf \
+--pitch-config conf/pitch.conf \
+--pitch_postprocess_config conf/pitch_process.conf \
+--paste_length_tolerance 30 \
+--cmd "$train_cmd" --nj 20 \
+data/$x data/$x/mfcc_pitch_log data/$x/mfcc_pitch_data || exit 1;
+steps/compute_cmvn_stats.sh \
+data/$x data/$x/cmvn_log data/$x/cmvn_data|| exit 1;
+mkdir -p textdata/$x|| exit 1;
+copy-matrix scp:data/$x/feats.scp ark,t:textdata/$x/text-feats.ark || exit 1;
+copy-matrix scp:data/$x/cmvn.scp ark,t:textdata/$x/text-cmvn.ark || exit 1;
+cp data/$x/utt2num_frames textdata/$x || exit 1;
+cp data/$x/utt2spk textdata/$x || exit 1;
+cp data/$x/spk2gender textdata/$x || exit 1;
+cp data/$x/text textdata/$x || exit 1;
+
+
+
+
+
+Install
+
+cd tools
+./extras/check_dependencies.sh
+make -j 8
+./extras/install_srilm.sh
+
+cd ../src
+./configure --shared
+make depend -j 8
+make -j 8
+
+compute-kaldi-pitch-feats --sample-frequency=8000 scp:wav.scp ark:- 
+compute-and-process-kaldi-pitch-feats --simulate-first-pass-online=true \\\n"
+        "  --frames-per-chunk=10 --sample-frequency=8000 scp:wav.scp ark:- 
+
+		
+4k0c0301 
+
+copy-matrix ark:testark:9 ark,t:-
+
+
+		
+		WSJ
+
+cd /mnt/data/projects/kaldi/egs/wsj/s5
+source path.sh
+nohup ./run.sh --config conf/mfcc_hires.conf --config conf/decode_dnn.config --config conf/online_pitch.conf --stage 0 --train-cmd run.pl --cuda-cmd "run.pl --gpu 1" --decode-cmd "run.pl --mem 2G" --wsj0 /mnt/data/projects/data/wsj/csr_senn --wsj1 /mnt/data/projects/data/wsj/csr_1_senn & disown
+
+
+export wsj0=/mnt/data/projects/data/wsj/csr_senn
+export wsj1=/mnt/data/projects/data/wsj/csr_1_senn
+tail -f nohup.out
+
+
+nohup ./run.sh --config conf/decode_dnn.config --use-energy false --num-mel-bins 40 --num-ceps 40 --low-freq 20 --high-freq -400 --add-raw-log-pitch true --normalization-left-context 100 --normalization-right-context 10 --frames-per-chunk 10 --simulate-first-pass-online true --delay 5 --stage 7 & disown
+
+
+LibriSpeech
+
+cd /mnt/data/projects/kaldi/egs/librispeech/s5
+export data=`pwd`/data
+source path.sh
+source cmd.sh
+nohup ./run.sh --config conf/mfcc_hires.conf --config conf/online_pitch.conf --stage 20 & disown
+tail -f nohup.out
+
+
+
+
+
+export train_cmd=queue.pl
+export decode_cmd="queue.pl --mem 2G"
+export cuda_cmd="queue.pl --gpu 1"
+
+
+#source /mnt/data/projects/kaldi/tools/env.sh
+
+local/wsj_data_prep.sh $wsj0/??-{?,??}.? $wsj1/??-{?,??}.? 
+local/wsj_prepare_dict.sh --dict-suffix "_nosp"
+utils/prepare_lang.sh data/local/dict_nosp "<SPOKEN_NOISE>" data/local/lang_tmp_nosp data/lang_nosp
+local/wsj_format_data.sh --lang-suffix "_nosp"
+
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+    steps/make_mfcc.sh --cmd "$train_cmd" --nj 20 data/$x || exit 1;
+    steps/compute_cmvn_stats.sh data/$x || exit 1;
+done
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do
+    steps/make_mfcc_pitch.sh --cmd "$train_cmd" --nj 20 data/$x || exit 1;
+    steps/compute_cmvn_stats.sh data/$x || exit 1;
+done
+
+All WSJ
+local/wsj_data_prep.sh $wsj0/??-{?,??}.? $wsj1/??-{?,??}.?  || exit 1;
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do steps/make_mfcc_pitch.sh data/$x; done
+
+for x in test_eval92 test_eval93 test_dev93 train_si284; do copy-matrix scp:data/$x/feats.scp ark,t:data/$x/feats-extract.ark; done
+
+copy-matrix scp:data/train_si284/feats.scp ark,t:data/train_si284/text-feats.ark
+copy-matrix scp:data/train_si284/feats.scp ark,t:data/train_si284/text-feats.ark
+
+steps/make_mfcc_pitch.sh data/test_dev93
+
+compute-and-process-kaldi-pitch-feats --simulate-first-pass-online=true --frames-per-chunk=10 --sample-frequency=16000 scp:data/train_si284/wav.scp ark:data/train_si284/pitch.ark
+
+
+
+sbatch \
+    --job-name="wsj_kaldi_40" \
+    --partition=cpu \
+    --mem=10G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec \
+    /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj_kaldi_mel.sh \
+    40 \
+    /data/VOL3/bstriner
+export CUDA_VISIBLE_DEVICES=-1
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir=/data/VOL3/bstriner/asr-vae/data/wsj/exports/fbank40 \
+    --data_dir=/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-fbank80 \
+    --feats_file=feats.ark \
+    > /data/VOL3/bstriner/asr-vae/logs/records/${JOB_NAME}.out 2>&1
+EOF
+
+
+## Kaldi process
+
+sbatch \
+    --job-name="wsj_kaldi_40" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec \
+    -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt \
+    /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_kaldi_mel.sh \
+    40 \
+    /data/VOL3/bstriner/data/wsj/exports/mel40 \
+    >  /data/VOL3/bstriner/data/logs/wsj_mel40.txt 2>&1
+EOF
+
+sbatch \
+    --job-name="wsj_kaldi_80" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+singularity exec \
+    -B /data/VOL3/bstriner/singularity/images/kaldi-latest-opt:/opt \
+    /data/VOL3/bstriner/singularity/images/kaldi-cpu.simg \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_kaldi_mel.sh \
+    80 \
+    /data/VOL3/bstriner/data/wsj/exports/mel80 \
+    >  /data/VOL3/bstriner/data/logs/wsj_mel80.txt 2>&1
+EOF
+
+# Records
+
+
+sbatch \
+    --job-name="wsj_records-mel40" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir="/data/VOL3/bstriner/data/wsj/exports/mel40" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-40-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel-40-cmvn-speaker.txt" \
+     2>&1
+EOF
+
+sbatch \
+    --job-name="wsj_records-mel80" \
+    --partition=cpu \
+    --mem=30G \
+    --mail-type=ALL \
+    --mail-user=bstriner@cs.cmu.edu \
+    --time=48:00:00 \
+<<EOF
+#!/bin/bash
+#!/bin/sh
+source /data/VOL3/bstriner/pyvenv/bin/activate
+export PYTHONPATH=/data/VOL3/bstriner/asr-vae
+python \
+    /data/VOL3/bstriner/asr-vae/experiments/wsj/wsj_records.py \
+    --input_dir="/data/VOL3/bstriner/data/wsj/exports/mel80" \
+    --data_dir="/data/VOL3/bstriner/asr-vae/data/wsj/tfrecords-mel-80-cmvn-speaker" \
+    --files_per_shard=100 \
+    --feats_file="feats-cmvn.ark" \
+     > "/data/VOL3/bstriner/asr-vae/logs/wsj_records-mel-80-cmvn-speaker.txt" \
+     2>&1
+EOF
